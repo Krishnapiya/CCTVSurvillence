@@ -115,14 +115,44 @@ export const dataService = {
       });
       if (response.ok) {
         const backendCameras = await response.json();
-        const mapped: CameraProfile[] = backendCameras.map((c: any) => ({
-          id: c.id,
-          name: c.name,
-          location: 'Company Site',
-          status: c.status === 'online' ? 'active' : 'inactive',
-          ip: c.rtsp_url,
-          rois: c.rois || []
-        }));
+        const localCameras = dataService.getCameras();
+        const isRealToken = token && token !== 'mock-token-value';
+        
+        const mapped: CameraProfile[] = [];
+        for (const c of backendCameras) {
+          const localCam = localCameras.find(lc => lc.id === c.id);
+          let rois = c.rois || [];
+          
+          if (isRealToken && localCam && localCam.rois && localCam.rois.length > rois.length) {
+            console.log(`Syncing local ROIs for camera ${c.name} to backend...`);
+            try {
+              await fetch(`${API_BASE}/cameras/${c.id}`, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                  name: c.name,
+                  rtsp_url: c.rtsp_url,
+                  rois: localCam.rois
+                })
+              });
+              rois = localCam.rois;
+            } catch (err) {
+              console.error('Failed to sync local ROIs to backend:', err);
+            }
+          }
+          
+          mapped.push({
+            id: c.id,
+            name: c.name,
+            location: 'Company Site',
+            status: c.status === 'online' ? 'active' : 'inactive',
+            ip: c.rtsp_url,
+            rois: rois
+          });
+        }
         localStorage.setItem(STORAGE_KEYS.CAMERAS, JSON.stringify(mapped));
         return mapped;
       }
@@ -222,6 +252,9 @@ export const dataService = {
       });
       if (response.ok) {
         const backendJobs = await response.json();
+        const localJobs = localStorage.getItem(STORAGE_KEYS.JOBS) ? JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS)!) : [];
+        const isRealToken = token && token !== 'mock-token-value';
+        
         const mapped = backendJobs.map((j: any) => ({
           id: j.id,
           name: j.name,
@@ -229,8 +262,49 @@ export const dataService = {
           startTime: j.start_time,
           endTime: j.end_time,
           days: j.days,
-          cameraIds: j.camera_ids
+          cameraIds: j.camera_ids,
+          isActive: j.is_active
         }));
+        
+        if (isRealToken) {
+          for (const localJob of localJobs) {
+            if (localJob.id.startsWith('JOB-') || !mapped.some((mj: any) => mj.id === localJob.id)) {
+              console.log(`Syncing local-only job "${localJob.name}" to backend...`);
+              try {
+                const addRes = await fetch(`${API_BASE}/alert-jobs`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                  },
+                  body: JSON.stringify({
+                    name: localJob.name,
+                    event_type: localJob.eventType,
+                    start_time: localJob.startTime,
+                    end_time: localJob.endTime,
+                    days: localJob.days,
+                    camera_ids: localJob.cameraIds
+                  })
+                });
+                if (addRes.ok) {
+                  const saved = await addRes.json();
+                  mapped.push({
+                    id: saved.id,
+                    name: saved.name,
+                    eventType: saved.event_type,
+                    startTime: saved.start_time,
+                    endTime: saved.end_time,
+                    days: saved.days,
+                    cameraIds: saved.camera_ids,
+                    isActive: saved.is_active
+                  });
+                }
+              } catch (err) {
+                console.error('Failed to sync local job to backend:', err);
+              }
+            }
+          }
+        }
         localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(mapped));
         return mapped;
       }
@@ -346,6 +420,15 @@ export const dataService = {
           cameras = dataService.getCameras();
         }
         
+        const EVENT_TYPE_MAP: { [key: string]: string } = {
+          'fire': 'Fire Detection',
+          'smoke': 'Smoke Detection',
+          'intrusion': 'Human Detection',
+          'mobile_usage': 'Mobile Phone Detection',
+          'bag': 'Bag Detection',
+          'bench': 'Bench Detection'
+        };
+
         const mapped = events.map((e: any) => {
           const camera = cameras.find(c => c.id === e.camera_id);
           const camName = camera ? camera.name : 'IP Camera';
@@ -365,7 +448,7 @@ export const dataService = {
           
           return {
             id: e.id,
-            event: e.type,
+            event: EVENT_TYPE_MAP[e.type] || e.type,
             camera: camName,
             timestamp: new Date(e.timestamp).toLocaleString(),
             severity: severity,

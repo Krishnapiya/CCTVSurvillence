@@ -22,6 +22,37 @@ EVENT_TYPE_MAPPING = {
     "bench": "Bench Detection"
 }
 
+active_job_ids_cache = set()
+last_cache_update = 0.0
+cache_lock = threading.Lock()
+
+async def update_active_jobs_cache():
+    global active_job_ids_cache, last_cache_update
+    now = time.time()
+    if now - last_cache_update < 5.0:
+        return
+        
+    try:
+        from app.repositories.alert_job import AlertJobRepository
+        async with AsyncSessionLocal() as db_session:
+            repo = AlertJobRepository(db_session)
+            jobs = await repo.list(limit=1000)
+            active_ids = {str(j.id) for j in jobs if j.is_active}
+            global cache_lock
+            with cache_lock:
+                active_job_ids_cache = active_ids
+                last_cache_update = now
+    except Exception as e:
+        print(f"Error updating active jobs cache: {e}")
+
+def get_job_id_from_event(event_id: str) -> Optional[str]:
+    if not event_id.startswith("E-"):
+        return None
+    parts = event_id.split("-")
+    if len(parts) >= 7:
+        return "-".join(parts[1:6])
+    return None
+
 def is_point_in_polygon(point, polygon) -> bool:
     if not polygon or len(polygon) < 3:
         return False
@@ -69,12 +100,16 @@ def is_schedule_active(event_rule: dict) -> bool:
         print(f"Error checking schedule activity: {e}")
         return False
 
-def filter_events_by_schedules(events: list, rois: list, frame_shape: tuple) -> list:
+def filter_events_by_schedules(events: list, rois: list, frame_shape: tuple, active_job_ids: set) -> list:
     if not rois:
         return []
         
     filtered = []
     h, w = frame_shape[:2]
+    
+    # Calculate scale factor from actual frame resolution to 800x450 canvas resolution
+    scale_x = 800.0 / w if w > 0 else 1.0
+    scale_y = 450.0 / h if h > 0 else 1.0
     
     for event in events:
         event_type = event.get("type")
@@ -87,9 +122,14 @@ def filter_events_by_schedules(events: list, rois: list, frame_shape: tuple) -> 
             bbox = event["details"]["bbox1"]
             
         if bbox:
-            point = ((bbox[0] + bbox[2]) // 2, (bbox[1] + bbox[3]) // 2)
+            px = (bbox[0] + bbox[2]) // 2
+            py = (bbox[1] + bbox[3]) // 2
         else:
-            point = (w // 2, h // 2)
+            px = w // 2
+            py = h // 2
+            
+        # Scale the point to the frontend canvas space (800x450)
+        point = (int(px * scale_x), int(py * scale_y))
             
         matched_roi = None
         for roi in rois:
@@ -121,6 +161,12 @@ def filter_events_by_schedules(events: list, rois: list, frame_shape: tuple) -> 
         roi_events = matched_roi.get("events", [])
         is_active = False
         for rule in roi_events:
+            rule_id = rule.get("id", "")
+            rule_job_id = get_job_id_from_event(rule_id)
+            # Only process this rule if its job exists and is active!
+            if not rule_job_id or rule_job_id not in active_job_ids:
+                continue
+                
             rule_type = rule.get("type", "")
             rule_types = [t.strip() for t in rule_type.split(",")]
             if mapped_type in rule_types:
@@ -270,7 +316,11 @@ class StreamProcessor(threading.Thread):
             # Filter events based on active ROI schedules
             h, w, _ = frame.shape
             if hasattr(self, "rois") and self.rois:
-                detected_events = filter_events_by_schedules(detected_events, self.rois, (h, w))
+                await update_active_jobs_cache()
+                global active_job_ids_cache, cache_lock
+                with cache_lock:
+                    current_active_ids = set(active_job_ids_cache)
+                detected_events = filter_events_by_schedules(detected_events, self.rois, (h, w), current_active_ids)
             else:
                 detected_events = []
 

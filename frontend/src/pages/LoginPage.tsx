@@ -28,8 +28,8 @@ const LoginPage: React.FC = () => {
   const handleLogin = async () => {
     try {
       const formData = new URLSearchParams();
-      // Map frontend 'admin' username to seeded 'admin@example.com' email
-      formData.append('username', username === 'admin' ? 'admin@example.com' : username);
+      // Map frontend 'admin' username to seeded 'admin@surveillance.com' email
+      formData.append('username', username === 'admin' ? 'admin@surveillance.com' : username);
       formData.append('password', password);
 
       const backendHost = window.location.hostname;
