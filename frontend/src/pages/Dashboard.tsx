@@ -489,9 +489,20 @@ const Dashboard: React.FC = () => {
           <Grid container>
             <Grid item xs={12} md={8}>
               <Box sx={{ p: 2 }}>
-                <Box sx={{ width: '100%', aspectRatio: '16/9', bgcolor: '#000', borderRadius: 0.5, overflow: 'hidden', position: 'relative' }}>
-                  <img src={selectedDetailLog?.thumbnail} alt="Evidence" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                  <PlayCircleFilled sx={{ position: 'absolute', inset: 'calc(50% - 24px)', fontSize: 48, color: 'white', opacity: 0.8 }} />
+                <Box sx={{ width: '100%', aspectRatio: '16/9', bgcolor: '#000', borderRadius: 0.5, overflow: 'hidden', position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                  {selectedDetailLog?.videoUrl ? (
+                    <video 
+                      src={selectedDetailLog.videoUrl} 
+                      controls 
+                      autoPlay
+                      style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
+                    />
+                  ) : (
+                    <>
+                      <img src={selectedDetailLog?.thumbnail} alt="Evidence" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                      <PlayCircleFilled sx={{ position: 'absolute', inset: 'calc(50% - 24px)', fontSize: 48, color: 'white', opacity: 0.8 }} />
+                    </>
+                  )}
                 </Box>
               </Box>
             </Grid>
@@ -511,7 +522,24 @@ const Dashboard: React.FC = () => {
                     <Typography variant="body2" fontWeight="600" color="success.main">{selectedDetailLog?.confidence || '98.4%'}</Typography>
                   </Box>
                   <Divider />
-                  <Button variant="contained" fullWidth onClick={() => setSelectedDetailLog(null)} sx={{ bgcolor: '#2C3E50' }}>Close Evidence Panel</Button>
+                  <Stack direction="row" spacing={1} sx={{ width: '100%' }}>
+                    <Button 
+                      variant="contained" 
+                      fullWidth 
+                      component="a"
+                      href={selectedDetailLog?.videoUrl || '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      download={`Evidence-${selectedDetailLog?.id}.mp4`}
+                      disabled={!selectedDetailLog?.videoUrl}
+                      sx={{ bgcolor: '#2e7d32', '&:hover': { bgcolor: '#1b5e20' } }}
+                    >
+                      Download
+                    </Button>
+                    <Button variant="outlined" fullWidth onClick={() => setSelectedDetailLog(null)}>
+                      Close
+                    </Button>
+                  </Stack>
                 </Stack>
               </Box>
             </Grid>

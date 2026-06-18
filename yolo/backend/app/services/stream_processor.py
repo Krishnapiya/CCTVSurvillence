@@ -17,6 +17,7 @@ EVENT_TYPE_MAPPING = {
     "fire": "Fire Detection",
     "smoke": "Smoke Detection",
     "intrusion": "Human Detection",
+    "human_detection": "Human Detection",
     "mobile_usage": "Mobile Phone Detection",
     "bag": "Bag Detection",
     "bench": "Bench Detection"

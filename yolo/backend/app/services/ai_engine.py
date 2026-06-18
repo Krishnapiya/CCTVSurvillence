@@ -87,10 +87,10 @@ class AIEngine:
                     conf = float(box.conf[0])
                     bbox = [int(x) for x in box.xyxy[0].tolist()]
 
-                    # Person detection (intrusion)
+                    # Person detection (human_detection)
                     if label == "person" and conf >= 0.5:
                         events.append({
-                            "type": "intrusion",
+                            "type": "human_detection",
                             "confidence": conf,
                             "details": {"bbox": bbox}
                         })

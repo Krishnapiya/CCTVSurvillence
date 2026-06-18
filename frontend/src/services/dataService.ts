@@ -108,7 +108,7 @@ export const dataService = {
   fetchCameras: async (): Promise<CameraProfile[]> => {
     const token = localStorage.getItem('surv_token');
     try {
-      const response = await fetch(`${API_BASE}/cameras/`, {
+      const response = await fetch(`${API_BASE}/cameras`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -135,7 +135,8 @@ export const dataService = {
                 body: JSON.stringify({
                   name: c.name,
                   rtsp_url: c.rtsp_url,
-                  rois: localCam.rois
+                  rois: localCam.rois,
+                  location: localCam.location
                 })
               });
               rois = localCam.rois;
@@ -147,12 +148,71 @@ export const dataService = {
           mapped.push({
             id: c.id,
             name: c.name,
-            location: 'Company Site',
+            location: c.location || 'Company Site',
             status: c.status === 'online' ? 'active' : 'inactive',
             ip: c.rtsp_url,
             rois: rois
           });
         }
+
+        // Sync local-only cameras (those starting with "CAM-" or not matching any backend ID) to the backend
+        if (isRealToken) {
+          for (const localCam of localCameras) {
+            const existsOnBackend = backendCameras.some((bc: any) => bc.id === localCam.id);
+            if (localCam.id.startsWith('CAM-') || !existsOnBackend) {
+              console.log(`Syncing local-only camera "${localCam.name}" to backend...`);
+              try {
+                const addRes = await fetch(`${API_BASE}/cameras`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                  },
+                  body: JSON.stringify({
+                    name: localCam.name,
+                    rtsp_url: localCam.ip,
+                    location: localCam.location
+                  })
+                });
+                if (addRes.ok) {
+                  const saved = await addRes.json();
+                  let rois = localCam.rois || [];
+                  if (rois.length > 0) {
+                    try {
+                      await fetch(`${API_BASE}/cameras/${saved.id}`, {
+                        method: 'PUT',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                          name: saved.name,
+                          rtsp_url: saved.rtsp_url,
+                          rois: rois,
+                          location: localCam.location
+                        })
+                      });
+                    } catch (err) {
+                      console.error('Failed to sync local ROIs for newly added camera:', err);
+                    }
+                  }
+                  
+                  mapped.push({
+                    id: saved.id,
+                    name: saved.name,
+                    location: saved.location || 'Company Site',
+                    status: saved.status === 'online' ? 'active' : 'inactive',
+                    ip: saved.rtsp_url,
+                    rois: rois
+                  });
+                }
+              } catch (err) {
+                console.error('Failed to sync local camera to backend:', err);
+              }
+            }
+          }
+        }
+        
         localStorage.setItem(STORAGE_KEYS.CAMERAS, JSON.stringify(mapped));
         return mapped;
       }
@@ -175,7 +235,8 @@ export const dataService = {
           body: JSON.stringify({
             name: camera.name,
             rtsp_url: camera.ip,
-            rois: camera.rois
+            rois: camera.rois,
+            location: camera.location
           })
         });
       } catch (err) {
@@ -197,7 +258,7 @@ export const dataService = {
   addCamera: async (camera: CameraProfile) => {
     const token = localStorage.getItem('surv_token');
     try {
-      const response = await fetch(`${API_BASE}/cameras/`, {
+      const response = await fetch(`${API_BASE}/cameras`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -205,12 +266,14 @@ export const dataService = {
         },
         body: JSON.stringify({
           name: camera.name,
-          rtsp_url: camera.ip
+          rtsp_url: camera.ip,
+          location: camera.location
         })
       });
       if (response.ok) {
         const newCam = await response.json();
         camera.id = newCam.id;
+        camera.location = newCam.location || camera.location;
       }
     } catch (err) {
       console.error('Failed to sync added camera to backend:', err);
@@ -268,7 +331,8 @@ export const dataService = {
         
         if (isRealToken) {
           for (const localJob of localJobs) {
-            if (localJob.id.startsWith('JOB-') || !mapped.some((mj: any) => mj.id === localJob.id)) {
+            const backendMatch = mapped.find((mj: any) => mj.id === localJob.id);
+            if (localJob.id.startsWith('JOB-') || !backendMatch) {
               console.log(`Syncing local-only job "${localJob.name}" to backend...`);
               try {
                 const addRes = await fetch(`${API_BASE}/alert-jobs`, {
@@ -298,9 +362,85 @@ export const dataService = {
                     cameraIds: saved.camera_ids,
                     isActive: saved.is_active
                   });
+                  
+                  const oldId = localJob.id;
+                  const newId = saved.id;
+                  const currentCameras = dataService.getCameras();
+                  let camerasUpdated = false;
+                  const updatedCams = currentCameras.map(cam => {
+                    let camChanged = false;
+                    const updatedRois = (cam.rois || []).map(roi => {
+                      let roiChanged = false;
+                      const updatedEvents = (roi.events || []).map((ev: any) => {
+                        if (ev.id.includes(oldId)) {
+                          roiChanged = true;
+                          return {
+                            ...ev,
+                            id: ev.id.replace(oldId, newId)
+                          };
+                        }
+                        return ev;
+                      });
+                      if (roiChanged) {
+                        camChanged = true;
+                        return { ...roi, events: updatedEvents };
+                      }
+                      return roi;
+                    });
+                    if (camChanged) {
+                      camerasUpdated = true;
+                      return { ...cam, rois: updatedRois };
+                    }
+                    return cam;
+                  });
+
+                  if (camerasUpdated) {
+                    console.log(`Syncing updated camera event IDs from old job ${oldId} to new UUID ${newId}...`);
+                    dataService.saveCameras(updatedCams);
+                  }
                 }
               } catch (err) {
                 console.error('Failed to sync local job to backend:', err);
+              }
+            } else {
+              const needsUpdate =
+                localJob.name !== backendMatch.name ||
+                localJob.eventType !== backendMatch.eventType ||
+                localJob.startTime !== backendMatch.startTime ||
+                localJob.endTime !== backendMatch.endTime ||
+                JSON.stringify(localJob.days) !== JSON.stringify(backendMatch.days) ||
+                JSON.stringify(localJob.cameraIds) !== JSON.stringify(backendMatch.cameraIds) ||
+                localJob.isActive !== backendMatch.isActive;
+
+              if (needsUpdate) {
+                console.log(`Syncing local updates for job "${localJob.name}" to backend...`);
+                try {
+                  await fetch(`${API_BASE}/alert-jobs/${localJob.id}`, {
+                    method: 'PUT',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                      name: localJob.name,
+                      event_type: localJob.eventType,
+                      start_time: localJob.startTime,
+                      end_time: localJob.endTime,
+                      days: localJob.days,
+                      camera_ids: localJob.cameraIds,
+                      is_active: localJob.isActive !== false
+                    })
+                  });
+                  backendMatch.name = localJob.name;
+                  backendMatch.eventType = localJob.eventType;
+                  backendMatch.startTime = localJob.startTime;
+                  backendMatch.endTime = localJob.endTime;
+                  backendMatch.days = localJob.days;
+                  backendMatch.cameraIds = localJob.cameraIds;
+                  backendMatch.isActive = localJob.isActive;
+                } catch (err) {
+                  console.error('Failed to sync local job updates to backend:', err);
+                }
               }
             }
           }
@@ -424,6 +564,7 @@ export const dataService = {
           'fire': 'Fire Detection',
           'smoke': 'Smoke Detection',
           'intrusion': 'Human Detection',
+          'human_detection': 'Human Detection',
           'mobile_usage': 'Mobile Phone Detection',
           'bag': 'Bag Detection',
           'bench': 'Bench Detection'
@@ -443,7 +584,20 @@ export const dataService = {
           
           let thumbnail = 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?auto=format&fit=crop&w=400&q=80';
           if (e.snapshot_path) {
-            thumbnail = e.snapshot_path.startsWith('http') ? e.snapshot_path : `${MEDIA_BASE}/${e.snapshot_path}`;
+            let path = e.snapshot_path;
+            if (path.startsWith('./')) {
+              path = path.substring(2);
+            }
+            thumbnail = e.snapshot_path.startsWith('http') ? e.snapshot_path : `${MEDIA_BASE}/${path}`;
+          }
+          
+          let videoUrl = null;
+          if (e.video_clip_path) {
+            let path = e.video_clip_path;
+            if (path.startsWith('./')) {
+              path = path.substring(2);
+            }
+            videoUrl = e.video_clip_path.startsWith('http') ? e.video_clip_path : `${MEDIA_BASE}/${path}`;
           }
           
           return {
@@ -454,7 +608,7 @@ export const dataService = {
             severity: severity,
             confidence: `${(e.confidence * 100).toFixed(1)}%`,
             thumbnail: thumbnail,
-            videoUrl: e.video_clip_path ? (e.video_clip_path.startsWith('http') ? e.video_clip_path : `${MEDIA_BASE}/${e.video_clip_path}`) : null
+            videoUrl: videoUrl
           };
         });
         localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(mapped));

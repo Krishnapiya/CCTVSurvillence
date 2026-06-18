@@ -22,6 +22,7 @@ class CameraBase(BaseModel):
     name: str
     rtsp_url: str
     camera_group_id: Optional[UUID] = None
+    location: Optional[str] = None
     rois: Optional[List[dict]] = []
 
 class CameraCreate(CameraBase):
@@ -31,6 +32,7 @@ class CameraUpdate(BaseModel):
     name: Optional[str] = None
     rtsp_url: Optional[str] = None
     camera_group_id: Optional[UUID] = None
+    location: Optional[str] = None
     status: Optional[str] = None
     rois: Optional[List[dict]] = None
 

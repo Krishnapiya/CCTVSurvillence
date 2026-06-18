@@ -26,7 +26,7 @@ class EventEngine:
         self.active_recordings: Dict[str, Dict[str, Any]] = {}
 
     def _determine_severity(self, event_type: str) -> str:
-        high_critical = ["fire", "suicide_risk", "fight", "intrusion"]
+        high_critical = ["fire", "suicide_risk", "fight", "intrusion", "human_detection"]
         medium = ["fainting", "projectile", "smoke"]
         if event_type in high_critical:
             return "CRITICAL"
@@ -156,15 +156,32 @@ class EventEngine:
         }
         await ws_manager.broadcast(ws_payload)
 
-        # 5. Dispatch background task (Celery) for video clipping & verification
+        # 5. Dispatch background task (Celery) or run in a local background thread if Celery is offline
         from app.workers.tasks import process_event_clip_and_verify
-        process_event_clip_and_verify.delay(
-            event_id=str(event_id),
-            camera_id=camera_id,
-            temp_frames_dir=temp_frames_dir,
-            event_type=event_type,
-            snapshot_path=snapshot_path
-        )
+        try:
+            process_event_clip_and_verify.delay(
+                event_id=str(event_id),
+                camera_id=camera_id,
+                temp_frames_dir=temp_frames_dir,
+                event_type=event_type,
+                snapshot_path=snapshot_path
+            )
+            print("Successfully dispatched event verification task via Celery.")
+        except Exception as celery_err:
+            print(f"Celery operational error: {celery_err}. Falling back to local background thread execution.")
+            import threading
+            def run_in_background():
+                try:
+                    process_event_clip_and_verify(
+                        event_id=str(event_id),
+                        camera_id=camera_id,
+                        temp_frames_dir=temp_frames_dir,
+                        event_type=event_type,
+                        snapshot_path=snapshot_path
+                    )
+                except Exception as e:
+                    print(f"Error running local clip & verify task: {e}")
+            threading.Thread(target=run_in_background, daemon=True).start()
 
 # Global Instance
 event_engine = EventEngine()

@@ -154,9 +154,20 @@ const EventLogs: React.FC = () => {
           <Grid container>
             <Grid item xs={12} md={8}>
               <Box sx={{ p: 2 }}>
-                <Box sx={{ width: '100%', aspectRatio: '16/9', bgcolor: '#000', borderRadius: 0.5, overflow: 'hidden', position: 'relative' }}>
-                  <img src={selectedLog?.thumbnail} alt="Evidence" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                  <PlayCircleFilled sx={{ position: 'absolute', inset: 'calc(50% - 24px)', fontSize: 48, color: 'white', opacity: 0.8 }} />
+                <Box sx={{ width: '100%', aspectRatio: '16/9', bgcolor: '#000', borderRadius: 0.5, overflow: 'hidden', position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                  {selectedLog?.videoUrl ? (
+                    <video 
+                      src={selectedLog.videoUrl} 
+                      controls 
+                      autoPlay
+                      style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
+                    />
+                  ) : (
+                    <>
+                      <img src={selectedLog?.thumbnail} alt="Evidence" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                      <PlayCircleFilled sx={{ position: 'absolute', inset: 'calc(50% - 24px)', fontSize: 48, color: 'white', opacity: 0.8 }} />
+                    </>
+                  )}
                 </Box>
               </Box>
             </Grid>
@@ -176,7 +187,19 @@ const EventLogs: React.FC = () => {
                     <Typography variant="body2" fontWeight="600" color="success.main">{selectedLog?.confidence || '98.4%'}</Typography>
                   </Box>
                   <Divider />
-                  <Button variant="contained" fullWidth sx={{ bgcolor: '#2C3E50' }}>Download Evidence Clip</Button>
+                  <Button 
+                    variant="contained" 
+                    fullWidth 
+                    component="a"
+                    href={selectedLog?.videoUrl || '#'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download={`Evidence-${selectedLog?.id}.mp4`}
+                    disabled={!selectedLog?.videoUrl}
+                    sx={{ bgcolor: '#2C3E50' }}
+                  >
+                    {selectedLog?.videoUrl ? "Download Evidence Clip" : "No Clip Available"}
+                  </Button>
                 </Stack>
               </Box>
             </Grid>

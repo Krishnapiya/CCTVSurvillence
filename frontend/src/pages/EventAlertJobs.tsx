@@ -411,6 +411,9 @@ const EventAlertJobs: React.FC = () => {
                       sx={{ fontSize: '9px', height: 18, fontWeight: 'bold' }}
                     />
                     <Chip label={`${job.cameraIds.length} PROFILES`} size="small" sx={{ fontSize: '9px', height: 18, bgcolor: '#e3f2fd', color: '#1976d2', fontWeight: 'bold' }} />
+                    {job.eventType && (
+                      <Chip label={job.eventType} size="small" sx={{ fontSize: '9px', height: 18, bgcolor: '#fff3e0', color: '#e65100', fontWeight: 'bold' }} />
+                    )}
                   </Stack>
                   <Stack direction="row" spacing={1} alignItems="center">
                     <Typography variant="caption" sx={{ fontWeight: 'bold', color: job.isActive === false ? '#999' : '#2C3E50' }}>{job.isActive === false ? 'OFF' : 'ON'}</Typography>

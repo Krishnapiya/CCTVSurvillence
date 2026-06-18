@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     # Model Weights Specific Configuration
     # Custom fire/smoke detection model weights
     YOLO_CUSTOM_FIRE_SMOKE_PATH: str = Field(
-        default="/media/ai/1646F35346F3325B/survialance/yolo/backend/models/best.pt"
+        default="./models/best.pt"
     )
     YOLO_PRETRAINED_DETECTION_PATH: str = Field(default="yolo11s.pt")
     

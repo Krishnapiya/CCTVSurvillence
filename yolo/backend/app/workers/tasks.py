@@ -14,8 +14,13 @@ from app.services.ai_verification import ai_verification_service
 from app.services.websocket_manager import ws_manager
 
 def run_async(coro):
-    """Helper to run async coroutine inside synchronous Celery worker."""
-    return asyncio.get_event_loop().run_until_complete(coro)
+    """Helper to run async coroutine inside synchronous Celery worker or thread."""
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    return loop.run_until_complete(coro)
 
 @shared_task(name="app.workers.tasks.process_event_clip_and_verify")
 def process_event_clip_and_verify(
@@ -90,7 +95,8 @@ def process_event_clip_and_verify(
     qwen_prompts = {
         "smoking": "Is the person in the image smoking a cigarette? Answer YES or NO.",
         "suicide_risk": "Is the person in the image climbing over a railing, hanging, or showing suicide risk indicators? Answer YES or NO.",
-        "intrusion": "Is a person violating the perimeter fence or restricted zone? Answer YES or NO."
+        "intrusion": "Is a person violating the perimeter fence or restricted zone? Answer YES or NO.",
+        "human_detection": "Is a person violating the perimeter fence or restricted zone? Answer YES or NO."
     }
 
     if event_type in qwen_prompts:
@@ -142,7 +148,21 @@ def process_event_clip_and_verify(
 
     # 4. Save to Database
     async def update_db():
-        async with AsyncSessionLocal() as db:
+        from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+        db_url = settings.DATABASE_URL
+        if db_url.startswith("postgresql://"):
+            db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+        bg_engine = create_async_engine(db_url, future=True)
+        BgSessionLocal = async_sessionmaker(
+            bind=bg_engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+            autocommit=False,
+            autoflush=False
+        )
+
+        async with BgSessionLocal() as db:
             event_repo = EventRepository(db)
             clip_repo = VideoClipRepository(db)
             verif_repo = EventVerificationRepository(db)
@@ -177,7 +197,8 @@ def process_event_clip_and_verify(
                     primary_verification = "REFUTED"
 
             await db.commit()
-            return primary_verification
+        await bg_engine.dispose()
+        return primary_verification
 
     primary_verif = run_async(update_db())
 

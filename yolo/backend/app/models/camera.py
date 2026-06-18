@@ -29,6 +29,7 @@ class Camera(Base):
     status = Column(String, default="offline", nullable=False)  # online, offline, error
     ip_address = Column(String, nullable=True)
     port = Column(Integer, nullable=True)
+    location = Column(String, nullable=True)
     rois = Column(JSON, default=list, nullable=False)
     camera_group_id = Column(UUID(as_uuid=True), ForeignKey("camera_groups.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
