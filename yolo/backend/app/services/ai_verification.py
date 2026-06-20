@@ -92,6 +92,8 @@ class AIVerificationService:
             return "VERIFIED", 0.88, "[Mock AI Verification] Detected suspicious high-altitude hanging or ledge-standing pose pattern."
         elif "smoke" in prompt_lower or "cigarette" in prompt_lower:
             return "VERIFIED", 0.82, "[Mock AI Verification] Cigarette object detected near mouth boundary."
+        elif "phone" in prompt_lower or "mobile" in prompt_lower:
+            return "VERIFIED", 0.85, "[Mock AI Verification] Detected cell phone object held in hand near torso/face region."
         
         return "VERIFIED", 0.80, f"[Mock AI Verification] Processed image with prompt: {prompt}"
 

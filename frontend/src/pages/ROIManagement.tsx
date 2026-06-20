@@ -35,12 +35,20 @@ const ROIManagement: React.FC = () => {
             setDrawingData({ type: targetRoi.type, coords: targetRoi.coords, points: targetRoi.points, color: targetRoi.color });
             setRoiName(targetRoi.name);
           } else {
+            if (cam.rois && cam.rois.length > 0) {
+              setCanvasMode('view');
+            } else {
+              setCanvasMode('add');
+              setRoiName(`${cam.name}_Region_${(cam.rois?.length || 0) + 1}`);
+            }
+          }
+        } else {
+          if (cam.rois && cam.rois.length > 0) {
+            setCanvasMode('view');
+          } else {
             setCanvasMode('add');
             setRoiName(`${cam.name}_Region_${(cam.rois?.length || 0) + 1}`);
           }
-        } else {
-          setCanvasMode('add');
-          setRoiName(`${cam.name}_Region_${(cam.rois?.length || 0) + 1}`);
         }
       } else {
         navigate('/rois');
@@ -174,12 +182,7 @@ const ROIManagement: React.FC = () => {
             <VideoCanvas 
               cameraId={camera?.id}
               onChange={handleCanvasChange}
-              initialRois={
-                canvasMode === 'add' ? [] : 
-                (canvasMode === 'edit' && activeRoiId && camera) 
-                  ? camera.rois.filter(r => r.id === activeRoiId) 
-                  : (camera?.rois || [])
-              } 
+              initialRois={camera?.rois || []} 
               focusedRoiId={activeRoiId}
               mode={canvasMode} 
             />

@@ -61,6 +61,7 @@ const MainLayout: React.FC = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('surv_auth');
+    localStorage.removeItem('surv_token');
     navigate('/login');
   };
 

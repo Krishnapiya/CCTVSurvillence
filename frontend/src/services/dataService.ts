@@ -91,18 +91,15 @@ export const dataService = {
   getCameras: (): CameraProfile[] => {
     const data = localStorage.getItem(STORAGE_KEYS.CAMERAS);
     if (!data) {
-      const sample: CameraProfile = {
-        id: 'CAM-001',
-        name: 'Front Entrance (Sample)',
-        location: 'Main Gate',
-        status: 'active',
-        ip: '192.168.1.101',
-        rois: []
-      };
-      localStorage.setItem(STORAGE_KEYS.CAMERAS, JSON.stringify([sample]));
-      return [sample];
+      localStorage.setItem(STORAGE_KEYS.CAMERAS, JSON.stringify([]));
+      return [];
     }
-    return JSON.parse(data);
+    try {
+      const parsed = JSON.parse(data);
+      return parsed.filter((c: any) => c.id !== 'CAM-001' && !c.name?.includes('Sample'));
+    } catch {
+      return [];
+    }
   },
 
   fetchCameras: async (): Promise<CameraProfile[]> => {
@@ -120,6 +117,9 @@ export const dataService = {
         
         const mapped: CameraProfile[] = [];
         for (const c of backendCameras) {
+          if (c.name.includes('Sample')) {
+            continue;
+          }
           const localCam = localCameras.find(lc => lc.id === c.id);
           let rois = c.rois || [];
           
@@ -155,11 +155,13 @@ export const dataService = {
           });
         }
 
-        // Sync local-only cameras (those starting with "CAM-" or not matching any backend ID) to the backend
+        // Sync local-only cameras to the backend (skipping sample ones)
         if (isRealToken) {
           for (const localCam of localCameras) {
-            const existsOnBackend = backendCameras.some((bc: any) => bc.id === localCam.id);
-            if (localCam.id.startsWith('CAM-') || !existsOnBackend) {
+            if (localCam.id === 'CAM-001' || localCam.name.includes('Sample')) {
+              continue;
+            }
+            if (localCam.id.startsWith('CAM-')) {
               console.log(`Syncing local-only camera "${localCam.name}" to backend...`);
               try {
                 const addRes = await fetch(`${API_BASE}/cameras`, {
@@ -224,7 +226,7 @@ export const dataService = {
 
   updateCamera: async (camera: CameraProfile) => {
     const token = localStorage.getItem('surv_token');
-    if (camera.id.length > 15) {
+    if (camera.id && !camera.id.startsWith('CAM-')) {
       try {
         await fetch(`${API_BASE}/cameras/${camera.id}`, {
           method: 'PUT',
@@ -288,7 +290,7 @@ export const dataService = {
 
   deleteCamera: async (id: string) => {
     const token = localStorage.getItem('surv_token');
-    if (id.length > 15) {
+    if (id && !id.startsWith('CAM-')) {
       try {
         await fetch(`${API_BASE}/cameras/${id}`, {
           method: 'DELETE',
@@ -332,7 +334,7 @@ export const dataService = {
         if (isRealToken) {
           for (const localJob of localJobs) {
             const backendMatch = mapped.find((mj: any) => mj.id === localJob.id);
-            if (localJob.id.startsWith('JOB-') || !backendMatch) {
+            if (localJob.id.startsWith('JOB-')) {
               console.log(`Syncing local-only job "${localJob.name}" to backend...`);
               try {
                 const addRes = await fetch(`${API_BASE}/alert-jobs`, {
@@ -452,14 +454,22 @@ export const dataService = {
       console.error('Failed to fetch alert jobs:', err);
     }
     const data = localStorage.getItem(STORAGE_KEYS.JOBS);
-    return data ? JSON.parse(data) : [];
+    if (data) {
+      try {
+        const parsed = JSON.parse(data);
+        return parsed.filter((j: any) => !j.id?.startsWith('JOB-') && !j.cameraIds?.some((id: string) => id.startsWith('CAM-')));
+      } catch {
+        return [];
+      }
+    }
+    return [];
   },
 
   saveAlertJobs: async (jobs: AlertJob[]) => {
     localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(jobs));
     const token = localStorage.getItem('surv_token');
     for (const job of jobs) {
-      if (job.id.length > 15) {
+      if (job.id && !job.id.startsWith('JOB-')) {
         try {
           await fetch(`${API_BASE}/alert-jobs/${job.id}`, {
             method: 'PUT',
@@ -528,7 +538,7 @@ export const dataService = {
 
   deleteAlertJob: async (id: string) => {
     const token = localStorage.getItem('surv_token');
-    if (id.length > 15) {
+    if (id && !id.startsWith('JOB-')) {
       try {
         await fetch(`${API_BASE}/alert-jobs/${id}`, {
           method: 'DELETE',
@@ -540,6 +550,9 @@ export const dataService = {
         console.error('Failed to delete alert job from backend:', err);
       }
     }
+    const localJobs = localStorage.getItem(STORAGE_KEYS.JOBS) ? JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS)!) : [];
+    const updated = localJobs.filter((j: any) => j.id !== id);
+    localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(updated));
   },
 
   getLogs: async (): Promise<any[]> => {
@@ -619,7 +632,15 @@ export const dataService = {
     }
     
     const data = localStorage.getItem(STORAGE_KEYS.LOGS);
-    return data ? JSON.parse(data) : [];
+    if (data) {
+      try {
+        const parsed = JSON.parse(data);
+        return parsed.filter((l: any) => !l.camera?.includes('Sample') && !l.event?.includes('Sample'));
+      } catch {
+        return [];
+      }
+    }
+    return [];
   },
   
   addLog: async (log: any) => {

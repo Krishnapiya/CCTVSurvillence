@@ -96,7 +96,7 @@ class AIEngine:
                         })
                     
                     # Mobile phone detection
-                    elif label == "cell phone" and conf >= 0.5:
+                    elif label == "cell phone" and conf >= 0.25:
                         events.append({
                             "type": "mobile_usage",
                             "confidence": conf,

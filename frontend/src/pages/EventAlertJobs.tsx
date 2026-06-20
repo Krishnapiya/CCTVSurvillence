@@ -488,7 +488,15 @@ const EventAlertJobs: React.FC = () => {
                               <TableCell>
                                 <Stack spacing={0.5} alignItems="flex-start">
                                   {attachedRois.map(roi => (
-                                    <Chip key={roi.id} label={roi.name} size="small" variant="outlined" color="primary" sx={{ fontSize: '10px', height: 20 }} />
+                                    <Chip 
+                                      key={roi.id} 
+                                      label={roi.name} 
+                                      size="small" 
+                                      variant="outlined" 
+                                      color="primary" 
+                                      onClick={() => navigate(`/roi?camId=${camId}&roiId=${roi.id}`)}
+                                      sx={{ fontSize: '10px', height: 20, cursor: 'pointer', '&:hover': { bgcolor: '#f0f4f8' } }} 
+                                    />
                                   ))}
                                   {attachedRois.length === 0 && <Typography variant="caption" color="error">No active region</Typography>}
                                 </Stack>

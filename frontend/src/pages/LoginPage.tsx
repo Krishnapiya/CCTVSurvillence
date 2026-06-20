@@ -80,17 +80,8 @@ const LoginPage: React.FC = () => {
         return;
       }
     } catch (err) {
-      console.warn('Real backend login failed or offline. Falling back to local mock login.', err);
-    }
-
-    // Local Mock Fallback
-    if (username === 'admin' && password === 'admin123') {
-      localStorage.setItem('surv_auth', 'true');
-      localStorage.setItem('surv_token', 'mock-token-value');
-      dispatch(loginSuccess({ username }));
-      navigate('/');
-    } else {
-      alert('Invalid credentials. Hint: admin / admin123');
+      console.error('Backend connection failed:', err);
+      alert('Could not connect to the backend server. Please verify the backend is running.');
     }
   };
 

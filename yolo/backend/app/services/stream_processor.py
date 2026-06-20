@@ -192,6 +192,9 @@ class StreamProcessor(threading.Thread):
         self.daemon = True
         self.frame_count = 0
         self.fps = 0.0
+        self.cap = None
+        self.lock = threading.Lock()
+        self.rois = []
 
     def run(self):
         print(f"Starting stream processor for camera {self.name} ({self.camera_id})")
@@ -222,9 +225,20 @@ class StreamProcessor(threading.Thread):
         while not self.stopped:
             # We support mocking files or testing with standard video loops
             cap = cv2.VideoCapture(self.rtsp_url)
+            
+            with self.lock:
+                if self.stopped:
+                    cap.release()
+                    break
+                self.cap = cap
+
             if not cap.isOpened():
                 print(f"Failed to open RTSP stream for {self.name}. Retrying in 5s...")
                 self._sync_db_status("offline")
+                with self.lock:
+                    if self.cap:
+                        self.cap.release()
+                        self.cap = None
                 # Interruptible sleep
                 for _ in range(50):
                     if self.stopped:
@@ -239,7 +253,13 @@ class StreamProcessor(threading.Thread):
 
             while not self.stopped:
                 loop_start = time.time()
-                ret, frame = cap.read()
+                
+                with self.lock:
+                    if self.stopped or self.cap is None:
+                        break
+                    cap_to_read = self.cap
+                
+                ret, frame = cap_to_read.read()
                 
                 if not ret or frame is None:
                     print(f"Failed to retrieve frame from {self.name}. Reconnecting...")
@@ -267,7 +287,7 @@ class StreamProcessor(threading.Thread):
                 if now - last_inference_time >= 0.33:
                     last_inference_time = now
                     # Run detection safely on the main thread's event loop
-                    if stream_processor_manager.loop:
+                    if stream_processor_manager.loop and not self.stopped:
                         asyncio.run_coroutine_threadsafe(
                             self._run_detection(frame),
                             stream_processor_manager.loop
@@ -279,12 +299,17 @@ class StreamProcessor(threading.Thread):
                 if sleep_time > 0:
                     time.sleep(sleep_time)
 
-            cap.release()
+            with self.lock:
+                if self.cap is not None:
+                    self.cap.release()
+                    self.cap = None
 
         self._sync_db_status("offline")
         print(f"Stopped stream processor for camera {self.name}")
 
     async def _run_detection(self, frame: np.ndarray):
+        if stream_processor_manager.processors.get(self.camera_id) is not self:
+            return
         try:
             # Parse configured ROIs into polygon points
             restricted_polygons = []
@@ -332,6 +357,8 @@ class StreamProcessor(threading.Thread):
             print(f"Error in stream detection for {self.name}: {e}")
 
     def _sync_db_status(self, status: str):
+        if stream_processor_manager.processors.get(self.camera_id) is not self:
+            return
         # Update in-memory status instantly
         camera_manager.update_status(self.camera_id, status)
 
@@ -346,6 +373,10 @@ class StreamProcessor(threading.Thread):
 
     def stop(self):
         self.stopped = True
+        with self.lock:
+            if self.cap is not None:
+                self.cap.release()
+                self.cap = None
 
 class StreamProcessorManager:
     def __init__(self):
@@ -364,15 +395,22 @@ class StreamProcessorManager:
         self.stop_camera_stream(camera_id)
         
         processor = StreamProcessor(camera_id, rtsp_url, name, self.callback)
-        processor.start()
         self.processors[camera_id] = processor
+        processor.start()
 
     def stop_camera_stream(self, camera_id: str):
         if camera_id in self.processors:
             processor = self.processors[camera_id]
             processor.stop()
-            processor.join(timeout=0.2)
+            processor.join(timeout=5.0)
+            if processor.is_alive():
+                print(f"Warning: StreamProcessor thread for camera {camera_id} is still alive after 5s join timeout")
             del self.processors[camera_id]
+
+    def update_camera_rois(self, camera_id: str, rois: list):
+        if camera_id in self.processors:
+            self.processors[camera_id].rois = rois
+            print(f"Dynamically updated {len(rois)} ROIs for running camera {camera_id}")
 
     def stop_all(self):
         for processor in list(self.processors.values()):

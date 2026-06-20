@@ -15,6 +15,12 @@ from app.services.websocket_manager import ws_manager
 
 def run_async(coro):
     """Helper to run async coroutine inside synchronous Celery worker or thread."""
+    from app.services.stream_processor import stream_processor_manager
+    if stream_processor_manager.loop and stream_processor_manager.loop.is_running():
+        import threading
+        if threading.current_thread() is not threading.main_thread():
+            future = asyncio.run_coroutine_threadsafe(coro, stream_processor_manager.loop)
+            return future.result()
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:
@@ -39,8 +45,9 @@ def process_event_clip_and_verify(
     # 1. Wait for sentinel complete.txt (written when post-trigger finishes)
     sentinel_path = os.path.join(temp_frames_dir, "complete.txt")
     poll_start = time.time()
+    timeout_limit = settings.POST_TRIGGER_DURATION_SECS + 15.0
     while not os.path.exists(sentinel_path):
-        if time.time() - poll_start > 12.0:
+        if time.time() - poll_start > timeout_limit:
             print(f"Timeout waiting for complete.txt for Event: {event_id}. Compiling partial frames.")
             break
         time.sleep(0.5)
@@ -56,6 +63,58 @@ def process_event_clip_and_verify(
     duration = 10.0
     file_size = 0
 
+    # Fetch active alert rules for this camera to filter bounding boxes
+    async def get_allowed_yolo_types():
+        from app.repositories.camera import CameraRepository
+        from app.models.alert_job import AlertJob
+        from sqlalchemy.future import select
+        
+        async with AsyncSessionLocal() as session:
+            try:
+                # 1. Get active alert job IDs
+                stmt = select(AlertJob).filter(AlertJob.is_active == True)
+                res = await session.execute(stmt)
+                active_job_ids = {str(job.id) for job in res.scalars().all()}
+                
+                # 2. Get camera
+                cam_repo = CameraRepository(session)
+                camera = await cam_repo.get(UUID(camera_id))
+                if not camera:
+                    return set()
+                    
+                allowed = set()
+                mapping = {
+                    "Human Detection": ["human_detection", "intrusion"],
+                    "Mobile Phone Detection": ["mobile_usage"],
+                    "Fire Detection": ["fire"],
+                    "Smoke Detection": ["smoke"],
+                    "Bag Detection": ["bag"],
+                    "Bench Detection": ["bench"]
+                }
+                
+                for roi in camera.rois:
+                    for event_rule in roi.get("events", []):
+                        rule_id = event_rule.get("id", "")
+                        if rule_id.startswith("E-"):
+                            parts = rule_id.split("-")
+                            if len(parts) >= 7:
+                                job_id = "-".join(parts[1:6])
+                                if job_id in active_job_ids:
+                                    rule_type = event_rule.get("type", "")
+                                    for part in rule_type.split(","):
+                                        t = part.strip()
+                                        if t in mapping:
+                                            allowed.update(mapping[t])
+                return allowed
+            except Exception as ex:
+                print(f"Error getting allowed yolo types: {ex}")
+                return set()
+
+    allowed_types = run_async(get_allowed_yolo_types())
+    if not allowed_types:
+        allowed_types = {event_type}
+    print(f"Allowed YOLO types for camera {camera_id} video annotation: {allowed_types}")
+
     if frame_files:
         try:
             # Read first frame to get dimensions
@@ -66,9 +125,40 @@ def process_event_clip_and_verify(
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             video_writer = cv2.VideoWriter(clip_path, fourcc, 15.0, (w, h))
             
+            from app.services.ai_engine import ai_engine
             for f in frame_files:
                 img = cv2.imread(f)
                 if img is not None:
+                    try:
+                        # Detect objects on the frame
+                        events = run_async(ai_engine.detect_frame(camera_id, img))
+                        # Draw boxes on the frame
+                        for event in events:
+                            etype = event["type"]
+                            # Only draw box if this event type is configured and active
+                            if etype not in allowed_types:
+                                continue
+                                
+                            conf = event["confidence"]
+                            details = event["details"]
+                            
+                            # Define box color based on event type
+                            if etype in ["fire", "smoke", "intrusion"]:
+                                color = (0, 0, 255) # Red
+                            elif etype == "fight":
+                                color = (0, 165, 255) # Orange
+                            elif etype in ["mobile_usage", "smoking"]:
+                                color = (255, 0, 255) # Purple
+                            else:
+                                color = (0, 255, 0) # Green
+                                
+                            if "bbox" in details:
+                                x1, y1, x2, y2 = details["bbox"]
+                                cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
+                                label = f"{etype.upper()} ({conf:.2f})"
+                                cv2.putText(img, label, (x1, max(15, y1 - 5)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+                    except Exception as det_err:
+                        print(f"Error annotating frame {f} for video clip: {det_err}")
                     video_writer.write(img)
             
             video_writer.release()
@@ -96,7 +186,8 @@ def process_event_clip_and_verify(
         "smoking": "Is the person in the image smoking a cigarette? Answer YES or NO.",
         "suicide_risk": "Is the person in the image climbing over a railing, hanging, or showing suicide risk indicators? Answer YES or NO.",
         "intrusion": "Is a person violating the perimeter fence or restricted zone? Answer YES or NO.",
-        "human_detection": "Is a person violating the perimeter fence or restricted zone? Answer YES or NO."
+        "human_detection": "Is a person violating the perimeter fence or restricted zone? Answer YES or NO.",
+        "mobile_usage": "Is the person in the image using or holding a cell phone or mobile phone? Answer YES or NO."
     }
 
     if event_type in qwen_prompts:

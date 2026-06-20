@@ -131,13 +131,21 @@ const VideoCanvas: React.FC<VideoCanvasProps> = ({ onChange, initialRois, mode, 
         initialRois?.forEach(roi => {
           if (roi.coords) addShapeToCanvas(roi, false);
         });
-      } else if (mode === 'edit' && focusedRoiId) {
-        const roi = initialRois?.find(r => r.id === focusedRoiId);
-        if (roi && roi.coords) addShapeToCanvas(roi, true);
+      } else if (mode === 'add') {
+        initialRois?.forEach(roi => {
+          if (roi.coords) addShapeToCanvas(roi, false);
+        });
+      } else if (mode === 'edit') {
+        initialRois?.forEach(roi => {
+          if (roi.coords) {
+            const isEditable = roi.id === focusedRoiId;
+            addShapeToCanvas(roi, isEditable);
+          }
+        });
       }
       fabricCanvas.current.renderAll();
     }
-  }, [mode, focusedRoiId]); // Only redraw when mode or focused ROI changes
+  }, [mode, focusedRoiId, initialRois]);
 
   useEffect(() => {
     if (!fabricCanvas.current || !cameraId) return;

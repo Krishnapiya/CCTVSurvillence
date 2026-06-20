@@ -99,12 +99,17 @@ async def update_camera(
     updated_camera = await repo.update(camera, camera_in.dict(exclude_unset=True))
     await db.commit()
 
-    # Restart stream thread if RTSP URL was changed or ROIs were updated
-    if (camera_in.rtsp_url and camera_in.rtsp_url != old_url) or camera_in.rois is not None:
+    # Dynamically update running stream thread depending on what changed
+    if camera_in.rtsp_url and camera_in.rtsp_url != old_url:
         stream_processor_manager.start_camera_stream(
             camera_id=str(updated_camera.id),
             rtsp_url=updated_camera.rtsp_url,
             name=updated_camera.name
+        )
+    elif camera_in.rois is not None:
+        stream_processor_manager.update_camera_rois(
+            camera_id=str(updated_camera.id),
+            rois=updated_camera.rois
         )
 
     return updated_camera
