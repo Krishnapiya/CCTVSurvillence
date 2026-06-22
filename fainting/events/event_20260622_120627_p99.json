@@ -1,0 +1,13 @@
+{
+    "person_id": 99,
+    "timestamp": "2026-06-22T06:36:27.439717+00:00",
+    "confidence_score": 1.0,
+    "screenshot_path": "/events/screenshot_20260622_120627_p99.jpg",
+    "video_path": "",
+    "details": {
+        "track_id": 99,
+        "peak_velocity": 270.0,
+        "motion_score": 0.0,
+        "horizontal_duration": 3.0
+    }
+}

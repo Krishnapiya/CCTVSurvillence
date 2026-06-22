@@ -31,6 +31,7 @@ const eventTypes = [
   { name: 'Bag Detection' },
   { name: 'Bench Detection' },
   { name: 'Fainting Detection' },
+  { name: 'Fight Detection' },
 ];
 
 
