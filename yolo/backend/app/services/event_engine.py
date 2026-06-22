@@ -68,6 +68,9 @@ class EventEngine:
     async def handle_detection(self, camera_id: str, detection: Dict[str, Any], frame: np.ndarray):
         event_type = detection["type"]
         confidence = detection["confidence"]
+        roi_name = detection.get("details", {}).get("roi_name")
+        if roi_name is not None:
+            roi_name = str(roi_name).strip() or None
         
         # Apply cooldown check
         now = time.time()
@@ -116,6 +119,7 @@ class EventEngine:
                 "camera_id": uuid.UUID(camera_id),
                 "type": event_type,
                 "confidence": confidence,
+                "roi_name": roi_name,
                 "snapshot_path": snapshot_path,
                 "video_clip_path": "",
                 "timestamp": datetime.now(timezone.utc)
@@ -149,6 +153,7 @@ class EventEngine:
                 "type": event_type,
                 "confidence": confidence,
                 "severity": severity,
+                "roi_name": roi_name,
                 "status": "CREATED",
                 "snapshot_url": f"/media/snapshots/{snapshot_filename}",
                 "timestamp": datetime.now(timezone.utc).isoformat()

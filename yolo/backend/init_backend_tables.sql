@@ -52,6 +52,7 @@ CREATE TABLE events (
     camera_id UUID REFERENCES cameras(id) ON DELETE CASCADE NOT NULL,
     type VARCHAR(100) NOT NULL,
     confidence FLOAT NOT NULL,
+    roi_name VARCHAR(255),
     snapshot_path VARCHAR(255),
     video_clip_path VARCHAR(255),
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,

@@ -41,6 +41,17 @@ class Settings(BaseSettings):
     PRE_TRIGGER_DURATION_SECS: float = 5.0
     POST_TRIGGER_DURATION_SECS: float = 5.0
 
+    # Station identity — used when syncing events to CCTV Master
+    INSTALLATION_ID: str = Field(default="INST-003")
+    OFFICE_CODE: str = Field(default="CJ-002")
+    OFFICE_NAME: str = Field(default="Central Jail")
+
+    # Master sync (CCTV Master dashboard at HQ)
+    MASTER_API_URL: str = Field(default="http://localhost:8000/api/sync")
+    SYNC_API_KEY: str = Field(default="cctv-sync-key-change-me")
+    SYNC_PUSH_INTERVAL_MINUTES: int = Field(default=2)
+    SYNC_ENABLED: bool = Field(default=False)
+
     class Config:
         env_file = ".env"
         case_sensitive = True
