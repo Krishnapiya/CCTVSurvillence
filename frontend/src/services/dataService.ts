@@ -1,3 +1,5 @@
+import { EVENT_TYPE_LABELS } from '../constants/eventTypes';
+
 export interface EventSchedule {
   id: string;
   type: string;
@@ -611,24 +613,12 @@ export const dataService = {
           cameras = dataService.getCameras();
         }
         
-        const EVENT_TYPE_MAP: { [key: string]: string } = {
-          'fire': 'Fire Detection',
-          'smoke': 'Smoke Detection',
-          'intrusion': 'Human Detection',
-          'human_detection': 'Human Detection',
-          'mobile_usage': 'Mobile Phone Detection',
-          'bag': 'Bag Detection',
-          'bench': 'Bench Detection',
-          'fainting': 'Fainting Detection',
-          'fight': 'Fight Detection'
-        };
-
         const mapped = events.map((e: any) => {
           const camera = cameras.find(c => c.id === e.camera_id);
           const camName = camera ? camera.name : 'IP Camera';
           
           let severity = 'medium';
-          const typeLower = e.type.toLowerCase();
+          const typeLower = (e.type || '').toLowerCase();
           if (typeLower.includes('fire') || typeLower.includes('smoke') || typeLower.includes('fight') || typeLower.includes('suicide')) {
             severity = 'critical';
           } else if (typeLower.includes('faint') || typeLower.includes('phone') || typeLower.includes('smoking') || typeLower.includes('uniform')) {
@@ -645,9 +635,12 @@ export const dataService = {
           
           return {
             id: e.id,
-            event: EVENT_TYPE_MAP[e.type] || e.type,
+            eventType: e.type,
+            event: EVENT_TYPE_LABELS[e.type] || e.type,
             camera: camName,
+            cameraId: e.camera_id,
             timestamp: new Date(e.timestamp).toLocaleString(),
+            timestampRaw: e.timestamp,
             severity: severity,
             confidence: `${(e.confidence * 100).toFixed(1)}%`,
             thumbnail: thumbnail,

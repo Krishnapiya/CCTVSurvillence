@@ -1,15 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Box, Typography, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, IconButton, Stack, TextField, InputAdornment, Button, Dialog, DialogTitle, DialogContent, Grid, Divider
+  Box, Typography, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, Stack, Button, Dialog, DialogTitle, DialogContent, Grid, Divider
 } from '@mui/material';
-import { Visibility, FilterList, Search, Download, AccessTime, Videocam, PlayCircleFilled } from '@mui/icons-material';
+import { Download, AccessTime, PlayCircleFilled } from '@mui/icons-material';
 import { dataService } from '../services/dataService';
 import VideoClipPlayer, { getEventClipDownloadUrl } from '../components/VideoClipPlayer';
+import EventLogFilters from '../components/EventLogFilters';
+import { applyLogFilters, DEFAULT_LOG_FILTERS } from '../utils/logFilters';
 
 const EventLogs: React.FC = () => {
   const [logs, setLogs] = useState<any[]>([]);
   const [selectedLog, setSelectedLog] = useState<any | null>(null);
-  const [search, setSearch] = useState('');
+  const [filters, setFilters] = useState(DEFAULT_LOG_FILTERS);
 
   useEffect(() => {
     const fetchLogs = async () => {
@@ -22,6 +24,13 @@ const EventLogs: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  const cameraOptions = useMemo(
+    () => Array.from(new Set(logs.map((l) => l.camera).filter(Boolean))).sort(),
+    [logs],
+  );
+
+  const filteredLogs = useMemo(() => applyLogFilters(logs, filters), [logs, filters]);
+
   const getSeverityColor = (severity: string) => {
     switch (severity) {
       case 'critical': return '#d32f2f';
@@ -31,11 +40,6 @@ const EventLogs: React.FC = () => {
       default: return '#757575';
     }
   };
-
-  const filteredLogs = logs.filter(log => 
-    log.event.toLowerCase().includes(search.toLowerCase()) ||
-    log.camera.toLowerCase().includes(search.toLowerCase())
-  );
 
   return (
     <Box>
@@ -50,21 +54,7 @@ const EventLogs: React.FC = () => {
         </Button>
       </Box>
 
-      <Paper sx={{ p: 2, mb: 3, borderRadius: 1 }}>
-        <Stack direction="row" spacing={2}>
-          <TextField 
-            placeholder="Search events, cameras..." 
-            size="small" 
-            fullWidth
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            InputProps={{ 
-              startAdornment: <InputAdornment position="start"><Search sx={{ fontSize: 20 }} /></InputAdornment> 
-            }} 
-          />
-          <Button variant="outlined" startIcon={<FilterList />} size="small">Filter</Button>
-        </Stack>
-      </Paper>
+      <EventLogFilters filters={filters} onChange={setFilters} cameras={cameraOptions} />
 
       <TableContainer component={Paper} sx={{ borderRadius: 1 }}>
         <Table sx={{ minWidth: 650 }}>
@@ -135,7 +125,9 @@ const EventLogs: React.FC = () => {
             {filteredLogs.length === 0 && (
               <TableRow>
                 <TableCell colSpan={6} align="center" sx={{ py: 10 }}>
-                  <Typography variant="body2" color="text.secondary">No event history found.</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {logs.length === 0 ? 'No event history found.' : 'No events match your search filters.'}
+                  </Typography>
                 </TableCell>
               </TableRow>
             )}

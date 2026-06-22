@@ -8,22 +8,21 @@ Surveillance-only types with no master equivalent are mapped to None (skip sync 
 from __future__ import annotations
 
 # surveillance type (lowercase) -> master event_code
+# Master codes are defined in CCTV Master config.yaml / event_types table.
 SURVEILLANCE_TO_MASTER_EVENT_CODE: dict[str, str | None] = {
-    # Direct / close matches
     "fainting": "FAINTING",
     "smoke": "SMOKE_DET",
+    "fire": "FIRE_DET",
     "projectile": "PROJECTILE",
     "intrusion": "INTRUSION",
-    "human_detection": "INTRUSION",
+    "human_detection": "HUMAN_DET",
     "uniform_violation": "GROUP_NO_UNIFORM",
-    # Surveillance types without a dedicated master code yet
-    "fire": "SMOKE_DET",  # nearest master category; add FIRE_DET on master if needed
-    "fight": None,
-    "suicide_risk": None,
-    "smoking": None,
-    "mobile_usage": None,
-    "bag": None,
-    "bench": None,
+    "smoking": "SMOKING_DET",
+    "fight": "FIGHT_DET",
+    "suicide_risk": "SUICIDE_RISK",
+    "mobile_usage": "MOBILE_DET",
+    "bag": "BAG_DET",
+    "bench": "BENCH_DET",
 }
 
 # Human-readable labels for surveillance UI (optional reference)

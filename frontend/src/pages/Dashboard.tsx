@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Grid, Paper, Typography, Box, Stack, useTheme, Chip, Divider, Switch, Menu, MenuItem, Dialog, DialogTitle, DialogContent, Button
 } from '@mui/material';
 import { Videocam, Warning, TrendingUp, Map as MapIcon, Circle, ListAlt, ArrowDropDown, PlayCircleFilled, AccessTime } from '@mui/icons-material';
 import { dataService, CameraProfile, AlertJob } from '../services/dataService';
 import VideoClipPlayer, { getEventClipDownloadUrl } from '../components/VideoClipPlayer';
+import EventLogFilters from '../components/EventLogFilters';
+import { applyLogFilters, DEFAULT_LOG_FILTERS } from '../utils/logFilters';
 
 const StatCard: React.FC<{ 
   title: string, 
@@ -213,6 +215,7 @@ const Dashboard: React.FC = () => {
   const [logs, setLogs] = useState<any[]>([]);
   const [alertJobs, setAlertJobs] = useState<AlertJob[]>([]);
   const [selectedDetailLog, setSelectedDetailLog] = useState<any | null>(null);
+  const [filters, setFilters] = useState(DEFAULT_LOG_FILTERS);
 
   // Menu State
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -263,6 +266,13 @@ const Dashboard: React.FC = () => {
 
   const activeJobs = alertJobs.filter(j => j.isActive !== false);
   const activeProfilesCount = activeJobs.reduce((acc, job) => acc + job.cameraIds.length, 0);
+
+  const cameraOptions = useMemo(
+    () => Array.from(new Set(logs.map((l) => l.camera).filter(Boolean))).sort(),
+    [logs],
+  );
+
+  const filteredLogs = useMemo(() => applyLogFilters(logs, filters), [logs, filters]);
 
   return (
     <Box>
@@ -372,20 +382,24 @@ const Dashboard: React.FC = () => {
         </Grid>
       </Grid>
 
+      <EventLogFilters filters={filters} onChange={setFilters} cameras={cameraOptions} />
+
       <Grid container spacing={2}>
         <Grid item xs={12} md={8}>
           <Paper sx={{ p: 2, borderRadius: 1, bgcolor: '#FFFFFF', display: 'flex', flexDirection: 'column', minHeight: 480 }}>
             <Typography variant="h3" sx={{ mb: 2, fontSize: '16px !important' }}>Latest Video Alerts</Typography>
             <Divider sx={{ mb: 2 }} />
             <Grid container spacing={2} sx={{ flexGrow: 1 }}>
-              {logs.slice(0, 4).map((log) => (
+              {filteredLogs.slice(0, 4).map((log) => (
                 <Grid item xs={12} sm={6} key={log.id}>
                   <VideoAlertCard log={log} onView={() => setSelectedDetailLog(log)} />
                 </Grid>
               ))}
-              {logs.length === 0 && (
+              {filteredLogs.length === 0 && (
                 <Box sx={{ display: 'flex', flexGrow: 1, alignItems: 'center', justifyContent: 'center', p: 4, width: '100%' }}>
-                  <Typography variant="body2" color="text.secondary">No video alerts detected yet.</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {logs.length === 0 ? 'No video alerts detected yet.' : 'No alerts match your search filters.'}
+                  </Typography>
                 </Box>
               )}
             </Grid>
@@ -400,10 +414,12 @@ const Dashboard: React.FC = () => {
               Latest 3 detection events in active alert configurations
             </Typography>
             <Stack spacing={2}>
-              {logs.length === 0 ? (
-                <Typography variant="body2" sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}>No alert cameras listed.</Typography>
+              {filteredLogs.length === 0 ? (
+                <Typography variant="body2" sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}>
+                  {logs.length === 0 ? 'No alert cameras listed.' : 'No alerts match your search filters.'}
+                </Typography>
               ) : (
-                logs.slice(0, 3).map((log) => (
+                filteredLogs.slice(0, 3).map((log) => (
                   <Box 
                     key={log.id} 
                     sx={{ 

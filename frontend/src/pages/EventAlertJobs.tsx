@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Box, Typography, Paper, Grid, Stack, Button, Divider, Select, MenuItem, TextField, ToggleButton, ToggleButtonGroup, List, ListItem, ListItemIcon, ListItemText, Alert, Chip,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, IconButton, Accordion, AccordionSummary, AccordionDetails,
-  Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Switch, Checkbox, Radio
+  Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Switch, Checkbox, Radio, FormControl, InputLabel, InputAdornment
 } from '@mui/material';
-import { CheckCircle, Videocam, AccessTime, CalendarMonth, Save, ListAlt, Info, Warning, Delete, AssignmentTurnedIn, ExpandMore, Edit, Map as MapIcon, ToggleOn, Add, Check } from '@mui/icons-material';
+import { CheckCircle, Videocam, AccessTime, CalendarMonth, Save, ListAlt, Info, Warning, Delete, AssignmentTurnedIn, ExpandMore, Edit, Map as MapIcon, ToggleOn, Add, Check, Search, Clear } from '@mui/icons-material';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { dataService, CameraProfile, ROI, AlertJob } from '../services/dataService';
 
@@ -69,6 +69,9 @@ const EventAlertJobs: React.FC = () => {
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [renameJobId, setRenameJobId] = useState<string | null>(null);
   const [newJobName, setNewJobName] = useState('');
+  const [jobSearch, setJobSearch] = useState('');
+  const [jobStatusFilter, setJobStatusFilter] = useState('');
+  const [jobEventFilter, setJobEventFilter] = useState('');
 
   const refreshData = useCallback(async () => {
     const fetchedCams = await dataService.fetchCameras();
@@ -83,6 +86,22 @@ const EventAlertJobs: React.FC = () => {
       setJobName(`Alert Job - ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
     }
   }, [targetsStr, refreshData]);
+
+  const filteredAlertJobs = useMemo(() => {
+    return alertJobs.filter((job) => {
+      if (jobSearch) {
+        const q = jobSearch.toLowerCase();
+        const matchesName = job.name.toLowerCase().includes(q);
+        const matchesEvent = (job.eventType || '').toLowerCase().includes(q);
+        const matchesId = job.id.toLowerCase().includes(q);
+        if (!matchesName && !matchesEvent && !matchesId) return false;
+      }
+      if (jobStatusFilter === 'active' && job.isActive === false) return false;
+      if (jobStatusFilter === 'inactive' && job.isActive !== false) return false;
+      if (jobEventFilter && !(job.eventType || '').includes(jobEventFilter)) return false;
+      return true;
+    });
+  }, [alertJobs, jobSearch, jobStatusFilter, jobEventFilter]);
 
   const toggleDay = (day: string) => {
     if (selectedDays.includes(day)) {
@@ -398,8 +417,66 @@ const EventAlertJobs: React.FC = () => {
       ) : (
         <Box>
           <Box sx={{ mb: 3 }}><Typography variant="h3" sx={{ fontSize: '18px !important' }}>Active Alert Jobs Registry</Typography></Box>
+          <Paper sx={{ p: 2, mb: 3, borderRadius: 1, border: '1px solid #DDDDDD' }} elevation={0}>
+            <Stack spacing={2}>
+              <TextField
+                placeholder="Search job name, event type, or job ID..."
+                size="small"
+                fullWidth
+                value={jobSearch}
+                onChange={(e) => setJobSearch(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start"><Search sx={{ fontSize: 20 }} /></InputAdornment>
+                  ),
+                }}
+              />
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                <FormControl size="small" fullWidth>
+                  <InputLabel>Status</InputLabel>
+                  <Select
+                    label="Status"
+                    value={jobStatusFilter}
+                    onChange={(e) => setJobStatusFilter(e.target.value)}
+                  >
+                    <MenuItem value="">All statuses</MenuItem>
+                    <MenuItem value="active">Active</MenuItem>
+                    <MenuItem value="inactive">Inactive</MenuItem>
+                  </Select>
+                </FormControl>
+                <FormControl size="small" fullWidth>
+                  <InputLabel>Event Type</InputLabel>
+                  <Select
+                    label="Event Type"
+                    value={jobEventFilter}
+                    onChange={(e) => setJobEventFilter(e.target.value)}
+                  >
+                    <MenuItem value="">All event types</MenuItem>
+                    {eventTypes.map((et) => (
+                      <MenuItem key={et.name} value={et.name}>{et.name}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                {(jobSearch || jobStatusFilter || jobEventFilter) && (
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<Clear />}
+                    onClick={() => {
+                      setJobSearch('');
+                      setJobStatusFilter('');
+                      setJobEventFilter('');
+                    }}
+                    sx={{ whiteSpace: 'nowrap', minWidth: 120 }}
+                  >
+                    Clear filters
+                  </Button>
+                )}
+              </Stack>
+            </Stack>
+          </Paper>
           <Stack spacing={2}>
-            {alertJobs.map((job) => (
+            {filteredAlertJobs.map((job) => (
               <Accordion key={job.id} defaultExpanded elevation={0} sx={{ border: '1px solid #DDDDDD', '&:before': { display: 'none' }, opacity: job.isActive === false ? 0.6 : 1 }}>
                 <AccordionSummary expandIcon={<ExpandMore />} sx={{ bgcolor: job.isActive === false ? '#f5f5f5' : '#F8F9FA', '& .MuiAccordionSummary-content': { alignItems: 'center', justifyContent: 'space-between' } }}>
                   <Stack direction="row" spacing={2} alignItems="center">
@@ -526,9 +603,9 @@ const EventAlertJobs: React.FC = () => {
                 </AccordionDetails>
               </Accordion>
             ))}
-            {alertJobs.length === 0 && (
+            {filteredAlertJobs.length === 0 && (
               <Paper sx={{ py: 10, textAlign: 'center', bgcolor: '#f8f9fa', border: '1px dashed #ccc' }}>
-                <Box sx={{ opacity: 0.5 }}><AssignmentTurnedIn sx={{ fontSize: 48, mb: 1 }} /><Typography variant="body2">No active monitoring jobs found.</Typography><Typography variant="caption">Select profiles from the Camera Directory to deploy new jobs.</Typography></Box>
+                <Box sx={{ opacity: 0.5 }}><AssignmentTurnedIn sx={{ fontSize: 48, mb: 1 }} /><Typography variant="body2">{alertJobs.length === 0 ? 'No active monitoring jobs found.' : 'No jobs match your search filters.'}</Typography><Typography variant="caption">Select profiles from the Camera Directory to deploy new jobs.</Typography></Box>
               </Paper>
             )}
           </Stack>

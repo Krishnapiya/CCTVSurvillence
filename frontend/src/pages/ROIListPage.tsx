@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Box, Typography, Button, Paper, Table, TableBody, TableCell, 
   TableContainer, TableHead, TableRow, Dialog, DialogTitle, 
   DialogContent, DialogActions, FormControl, InputLabel, Select, 
-  MenuItem, Stack, Chip, IconButton
+  MenuItem, Stack, Chip, IconButton, TextField, InputAdornment
 } from '@mui/material';
-import { Add, Map as MapIcon, Delete, Edit, Videocam } from '@mui/icons-material';
+import { Add, Map as MapIcon, Delete, Edit, Videocam, Search } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { dataService, CameraProfile, ROI } from '../services/dataService';
 
@@ -19,6 +19,9 @@ const ROIListPage: React.FC = () => {
   const [cameras, setCameras] = useState<CameraProfile[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedCamId, setSelectedCamId] = useState<string>('');
+  const [search, setSearch] = useState('');
+  const [cameraFilter, setCameraFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
 
   const loadData = async () => {
     const allCams = await dataService.fetchCameras();
@@ -58,6 +61,26 @@ const ROIListPage: React.FC = () => {
     }
   };
 
+  const filteredCameras = useMemo(() => {
+    return cameras
+      .filter((c) => c.rois && c.rois.length > 0)
+      .filter((c) => !cameraFilter || c.id === cameraFilter)
+      .map((cam) => ({
+        ...cam,
+        rois: cam.rois.filter((roi) => {
+          if (typeFilter && roi.type !== typeFilter) return false;
+          if (search) {
+            const q = search.toLowerCase();
+            const matchesRoi = roi.name.toLowerCase().includes(q);
+            const matchesCam = cam.name.toLowerCase().includes(q);
+            if (!matchesRoi && !matchesCam) return false;
+          }
+          return true;
+        }),
+      }))
+      .filter((cam) => cam.rois.length > 0);
+  }, [cameras, search, cameraFilter, typeFilter]);
+
   return (
     <Box>
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -72,6 +95,50 @@ const ROIListPage: React.FC = () => {
         </Button>
       </Box>
 
+      <Paper sx={{ p: 2, mb: 3, borderRadius: 1, border: '1px solid #DDDDDD' }} elevation={0}>
+        <Stack spacing={2}>
+          <TextField
+            placeholder="Search ROI name or camera..."
+            size="small"
+            fullWidth
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start"><Search sx={{ fontSize: 20 }} /></InputAdornment>
+              ),
+            }}
+          />
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+            <FormControl size="small" fullWidth>
+              <InputLabel>Camera</InputLabel>
+              <Select
+                label="Camera"
+                value={cameraFilter}
+                onChange={(e) => setCameraFilter(e.target.value)}
+              >
+                <MenuItem value="">All cameras</MenuItem>
+                {cameras.filter((c) => c.rois?.length).map((cam) => (
+                  <MenuItem key={cam.id} value={cam.id}>{cam.name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl size="small" fullWidth>
+              <InputLabel>ROI Type</InputLabel>
+              <Select
+                label="ROI Type"
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+              >
+                <MenuItem value="">All types</MenuItem>
+                <MenuItem value="rect">Rectangle</MenuItem>
+                <MenuItem value="polygon">Polygon</MenuItem>
+              </Select>
+            </FormControl>
+          </Stack>
+        </Stack>
+      </Paper>
+
       <Paper sx={{ width: '100%', mb: 2, border: '1px solid #DDDDDD', borderRadius: 1 }}>
         <TableContainer>
           <Table sx={{ minWidth: 650 }}>
@@ -83,14 +150,18 @@ const ROIListPage: React.FC = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {cameras.filter(c => c.rois && c.rois.length > 0).length === 0 ? (
+              {filteredCameras.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={3} align="center" sx={{ py: 3 }}>
-                    <Typography color="text.secondary">No Regions of Interest defined.</Typography>
+                    <Typography color="text.secondary">
+                      {cameras.filter(c => c.rois && c.rois.length > 0).length === 0
+                        ? 'No Regions of Interest defined.'
+                        : 'No ROIs match your search filters.'}
+                    </Typography>
                   </TableCell>
                 </TableRow>
               ) : (
-                cameras.filter(c => c.rois && c.rois.length > 0).map((cam) => (
+                filteredCameras.map((cam) => (
                   <React.Fragment key={cam.id}>
                     <TableRow sx={{ bgcolor: '#f4f6f8' }}>
                       <TableCell colSpan={3} sx={{ py: 1, pl: 3 }}>

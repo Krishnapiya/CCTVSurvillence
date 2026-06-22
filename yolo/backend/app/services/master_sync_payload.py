@@ -26,8 +26,8 @@ def station_context() -> dict[str, str | bool]:
 
 
 def master_event_id(surveillance_event_id) -> str:
-    """Stable event_id for master — prefix avoids collisions across stations."""
-    return f"EVT-{surveillance_event_id}"
+    """Use surveillance UUID as master event_id (same ID in both systems)."""
+    return str(surveillance_event_id)
 
 
 def camera_code_for_sync(camera: Camera) -> str:
