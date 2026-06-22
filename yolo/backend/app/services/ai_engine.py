@@ -12,6 +12,7 @@ class AIEngine:
         self._fire_model = None
         self._general_model = None
         self._pose_model = None
+        self._smoking_model = None
 
     def _init_models(self):
         """Lazy load models when first stream frame arrives to prevent import blocks."""
@@ -29,6 +30,16 @@ class AIEngine:
         if self._pose_model is None:
             self._pose_model = YOLO("yolo11s-pose.pt")
             self._pose_model.to(self.device)
+
+        if self._smoking_model is None:
+            smoking_path = os.path.join(settings.MODEL_WEIGHTS_DIR, "smoking_best.pt")
+            if not os.path.exists(smoking_path):
+                smoking_path = "/data/hfllama/survialance/yolo/backend/models/smoking_best.pt"
+            if os.path.exists(smoking_path):
+                self._smoking_model = YOLO(smoking_path)
+                self._smoking_model.to(self.device)
+            else:
+                print(f"Warning: Smoking model weights not found at {smoking_path}")
 
     def _is_point_in_polygon(self, point: Tuple[int, int], polygon: List[Tuple[int, int]]) -> bool:
         if not polygon or len(polygon) < 3:
@@ -135,7 +146,6 @@ class AIEngine:
                 boxes_data = pose_res[0].boxes.xyxy.cpu().numpy()
                 box_confs = pose_res[0].boxes.conf.cpu().numpy() if pose_res[0].boxes.conf is not None else None
                 
-                # Filter for people within the restricted polygons with high confidence (>0.55)
                 active_kps = []
                 active_boxes = []
                 active_confs = []
@@ -145,31 +155,38 @@ class AIEngine:
                     if box_confs is not None and box_confs[idx] < 0.55:
                         continue
                         
-                    px = int((box[0] + box[2]) / 2)
-                    py = int((box[1] + box[3]) / 2)
-                    
-                    # If inside restricted polygon (ROI)
-                    in_roi = False
-                    if not restricted_polygons:
-                        in_roi = True
+                    active_kps.append(keypoints_data[idx])
+                    active_boxes.append(box)
+                    if keypoints_conf is not None:
+                        active_confs.append(keypoints_conf[idx])
                     else:
-                        for poly in restricted_polygons:
-                            if self._is_point_in_polygon((px, py), poly):
-                                in_roi = True
-                                break
-                                
-                    if in_roi:
-                        active_kps.append(keypoints_data[idx])
-                        active_boxes.append(box)
-                        if keypoints_conf is not None:
-                            active_confs.append(keypoints_conf[idx])
-                        else:
-                            active_confs.append(np.ones(len(keypoints_data[idx])))
+                        active_confs.append(np.ones(len(keypoints_data[idx])))
                             
                 fight_events = self._detect_fight_from_poses(active_kps, active_boxes, active_confs)
                 events.extend(fight_events)
         except Exception as e:
             print(f"Error running pose/fight detection model: {e}")
+
+        # --- 4. RUN CUSTOM SMOKING YOLO ---
+        if self._smoking_model is not None:
+            try:
+                smoking_res = self._smoking_model(frame, verbose=False)
+                for r in smoking_res:
+                    for box in r.boxes:
+                        cls_id = int(box.cls[0])
+                        label = self._smoking_model.names[cls_id].lower()
+                        conf = float(box.conf[0])
+                        
+                        if conf >= 0.40:
+                            if label in ["smoker", "smoking", "cigarette"]:
+                                bbox = [int(x) for x in box.xyxy[0].tolist()]
+                                events.append({
+                                    "type": "smoking",
+                                    "confidence": conf,
+                                    "details": {"bbox": bbox}
+                                })
+            except Exception as e:
+                print(f"Error running smoking model: {e}")
 
         return events
 
