@@ -65,6 +65,33 @@ class EventRepository(BaseRepository[Event]):
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
+    async def list_pending_master_sync(self, limit: int = 50) -> List[Event]:
+        stmt = (
+            select(Event)
+            .filter(Event.master_synced_at.is_(None))
+            .options(selectinload(Event.camera))
+            .order_by(Event.timestamp.asc())
+            .limit(limit)
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_pending_clip_sync(self, limit: int = 20) -> List[Event]:
+        stmt = (
+            select(Event)
+            .filter(
+                Event.master_synced_at.isnot(None),
+                Event.master_clip_synced_at.is_(None),
+                Event.video_clip_path.isnot(None),
+                Event.video_clip_path != "",
+            )
+            .options(selectinload(Event.camera))
+            .order_by(Event.timestamp.asc())
+            .limit(limit)
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
 class VideoClipRepository(BaseRepository[VideoClip]):
     def __init__(self, db: AsyncSession):
         super().__init__(VideoClip, db)

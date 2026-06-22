@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     ALARM_SOUND_PATH: str = "/usr/share/sounds/alsa/Front_Center.wav" # Default sound on many Linux distros
 
     # PostgreSQL Database Settings
-    DB_HOST: str = os.getenv("DB_HOST", "localhost")
+    DB_HOST: str = os.getenv("DB_HOST", "192.168.13.189")
     DB_PORT: int = int(os.getenv("DB_PORT", 5432))
     DB_NAME: str = os.getenv("DB_NAME", "fall_detection")
     DB_USER: str = os.getenv("DB_USER", "postgres")

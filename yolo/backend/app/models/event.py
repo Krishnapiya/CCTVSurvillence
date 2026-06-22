@@ -15,6 +15,8 @@ class Event(Base):
     roi_name = Column(String, nullable=True)
     snapshot_path = Column(String, nullable=True)
     video_clip_path = Column(String, nullable=True)
+    master_synced_at = Column(DateTime(timezone=True), nullable=True)
+    master_clip_synced_at = Column(DateTime(timezone=True), nullable=True)
     timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
