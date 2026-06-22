@@ -24,6 +24,7 @@ class Camera(Base):
     __tablename__ = "cameras"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    camera_code = Column(String(50), unique=True, index=True, nullable=False)
     name = Column(String, unique=True, index=True, nullable=False)
     rtsp_url = Column(String, nullable=False)
     status = Column(String, default="offline", nullable=False)  # online, offline, error

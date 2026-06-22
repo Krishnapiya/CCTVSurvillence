@@ -26,10 +26,11 @@ class CameraBase(BaseModel):
     rois: Optional[List[dict]] = []
 
 class CameraCreate(CameraBase):
-    pass
+    camera_code: Optional[str] = None
 
 class CameraUpdate(BaseModel):
     name: Optional[str] = None
+    camera_code: Optional[str] = None
     rtsp_url: Optional[str] = None
     camera_group_id: Optional[UUID] = None
     location: Optional[str] = None
@@ -38,6 +39,7 @@ class CameraUpdate(BaseModel):
 
 class CameraResponse(CameraBase):
     id: UUID
+    camera_code: str
     status: str
     created_at: datetime
     updated_at: datetime

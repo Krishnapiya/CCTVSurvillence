@@ -9,6 +9,7 @@ from app.api import deps
 from app.models.user import User
 from app.services.stream_processor import stream_processor_manager
 from app.services.camera_manager import camera_manager
+from app.utils.camera_code import is_valid_camera_code, normalize_camera_code
 
 router = APIRouter()
 
@@ -67,7 +68,21 @@ async def create_camera(
     if existing:
         raise HTTPException(status_code=400, detail="Camera with this name already exists.")
 
-    camera = await repo.create(camera_in.dict())
+    data = camera_in.dict()
+    if data.get("camera_code"):
+        code = normalize_camera_code(data["camera_code"])
+        if not is_valid_camera_code(code):
+            raise HTTPException(
+                status_code=400,
+                detail="camera_code must look like CAM-01 (CAM- followed by digits).",
+            )
+        if await repo.get_by_camera_code(code):
+            raise HTTPException(status_code=400, detail="Camera code already exists.")
+        data["camera_code"] = code
+    else:
+        data["camera_code"] = await repo.allocate_next_camera_code()
+
+    camera = await repo.create(data)
     await db.commit()
 
     # Dynamically spin up the RTSP thread
@@ -95,8 +110,21 @@ async def update_camera(
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found.")
 
+    update_data = camera_in.dict(exclude_unset=True)
+    if "camera_code" in update_data and update_data["camera_code"] is not None:
+        code = normalize_camera_code(update_data["camera_code"])
+        if not is_valid_camera_code(code):
+            raise HTTPException(
+                status_code=400,
+                detail="camera_code must look like CAM-01 (CAM- followed by digits).",
+            )
+        existing_code = await repo.get_by_camera_code(code)
+        if existing_code and existing_code.id != camera.id:
+            raise HTTPException(status_code=400, detail="Camera code already exists.")
+        update_data["camera_code"] = code
+
     old_url = camera.rtsp_url
-    updated_camera = await repo.update(camera, camera_in.dict(exclude_unset=True))
+    updated_camera = await repo.update(camera, update_data)
     await db.commit()
 
     # Dynamically update running stream thread depending on what changed

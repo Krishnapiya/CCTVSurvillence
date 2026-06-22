@@ -13,6 +13,7 @@ async def main():
         
         camera_data = {
             "name": "kltrn",
+            "camera_code": await repo.allocate_next_camera_code(),
             "rtsp_url": "rtsp://swguser:Swguser789@@192.168.13.131:554/Streaming/Channels/101",
             "rois": []
         }
