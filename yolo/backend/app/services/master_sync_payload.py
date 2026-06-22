@@ -31,7 +31,9 @@ def master_event_id(surveillance_event_id) -> str:
 
 
 def camera_code_for_sync(camera: Camera) -> str:
-    """Master uses camera_code string; surveillance uses UUID — use short stable id."""
+    """Stable short code for CCTV Master (e.g. CAM-01). Falls back to UUID if unset."""
+    if camera.camera_code:
+        return camera.camera_code
     return str(camera.id)
 
 

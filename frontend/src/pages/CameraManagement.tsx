@@ -29,7 +29,7 @@ const CameraManagement: React.FC = () => {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [cameras, setCameras] = useState<CameraProfile[]>([]);
-  const [formData, setFormData] = useState({ id: '', name: '', location: '', ip: '' });
+  const [formData, setFormData] = useState({ id: '', cameraCode: '', name: '', location: '', ip: '' });
   const [isEditing, setIsEditing] = useState(false);
   const [search, setSearch] = useState('');
   const [liveCamera, setLiveCamera] = useState<CameraProfile | null>(null);
@@ -52,13 +52,13 @@ const CameraManagement: React.FC = () => {
 
   const handleOpenAdd = () => {
     setIsEditing(false);
-    setFormData({ id: '', name: '', location: '', ip: '' });
+    setFormData({ id: '', cameraCode: '', name: '', location: '', ip: '' });
     setOpen(true);
   };
 
   const handleOpenEdit = (cam: CameraProfile) => {
     setIsEditing(true);
-    setFormData({ id: cam.id, name: cam.name, location: cam.location, ip: cam.ip });
+    setFormData({ id: cam.id, cameraCode: cam.cameraCode || '', name: cam.name, location: cam.location, ip: cam.ip });
     setOpen(true);
   };
 
@@ -72,6 +72,7 @@ const CameraManagement: React.FC = () => {
         if (existingCam) {
           await dataService.updateCamera({
             ...existingCam,
+            cameraCode: formData.cameraCode || existingCam.cameraCode,
             name: formData.name,
             location: formData.location,
             ip: formData.ip
@@ -80,6 +81,7 @@ const CameraManagement: React.FC = () => {
       } else {
         await dataService.addCamera({
           id: `CAM-${Date.now()}`,
+          cameraCode: formData.cameraCode || undefined,
           name: formData.name,
           location: formData.location,
           ip: formData.ip,
@@ -106,7 +108,8 @@ const CameraManagement: React.FC = () => {
 
   const filteredCameras = cameras.filter(c => 
     c.name.toLowerCase().includes(search.toLowerCase()) || 
-    c.location.toLowerCase().includes(search.toLowerCase())
+    c.location.toLowerCase().includes(search.toLowerCase()) ||
+    (c.cameraCode || '').toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -161,7 +164,7 @@ const CameraManagement: React.FC = () => {
                     </Box>
                     <Box>
                       <Typography variant="body2" fontWeight="600">{cam.name}</Typography>
-                      <Typography variant="caption" color="text.secondary">{cam.id}</Typography>
+                      <Typography variant="caption" color="text.secondary">{cam.cameraCode || cam.id}</Typography>
                     </Box>
                   </Stack>
                 </TableCell>
@@ -240,6 +243,16 @@ const CameraManagement: React.FC = () => {
           </DialogTitle>
           <DialogContent sx={{ mt: 2 }}>
             <Stack spacing={2.5}>
+              <Box>
+                <Typography variant="caption" fontWeight="bold" sx={{ display: 'block', mb: 0.5 }}>CAMERA CODE (optional)</Typography>
+                <TextField 
+                  fullWidth 
+                  size="small" 
+                  value={formData.cameraCode} 
+                  onChange={(e) => setFormData({...formData, cameraCode: e.target.value.toUpperCase()})} 
+                  placeholder="Auto-assigned e.g. CAM-01" 
+                />
+              </Box>
               <Box>
                 <Typography variant="caption" fontWeight="bold" sx={{ display: 'block', mb: 0.5 }}>PROFILE NAME</Typography>
                 <TextField 

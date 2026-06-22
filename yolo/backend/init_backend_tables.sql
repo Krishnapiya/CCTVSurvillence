@@ -34,6 +34,7 @@ CREATE TABLE camera_groups (
 -- Cameras table
 CREATE TABLE cameras (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    camera_code VARCHAR(50) UNIQUE NOT NULL,
     name VARCHAR(255) UNIQUE NOT NULL,
     rtsp_url VARCHAR(255) NOT NULL,
     status VARCHAR(50) DEFAULT 'offline' NOT NULL,

@@ -19,6 +19,7 @@ export interface ROI {
 
 export interface CameraProfile {
   id: string;
+  cameraCode?: string;
   name: string;
   location: string;
   status: 'active' | 'inactive' | 'error';
@@ -180,6 +181,7 @@ export const dataService = {
           
           mapped.push({
             id: c.id,
+            cameraCode: c.camera_code,
             name: c.name,
             location: c.location || 'Company Site',
             status: c.status === 'online' ? 'active' : 'inactive',
@@ -271,7 +273,8 @@ export const dataService = {
             name: camera.name,
             rtsp_url: camera.ip,
             rois: camera.rois,
-            location: camera.location
+            location: camera.location,
+            ...(camera.cameraCode ? { camera_code: camera.cameraCode } : {}),
           })
         });
       } catch (err) {
@@ -302,12 +305,14 @@ export const dataService = {
         body: JSON.stringify({
           name: camera.name,
           rtsp_url: camera.ip,
-          location: camera.location
+          location: camera.location,
+          ...(camera.cameraCode ? { camera_code: camera.cameraCode } : {}),
         })
       });
       if (response.ok) {
         const newCam = await response.json();
         camera.id = newCam.id;
+        camera.cameraCode = newCam.camera_code;
         camera.location = newCam.location || camera.location;
       }
     } catch (err) {
