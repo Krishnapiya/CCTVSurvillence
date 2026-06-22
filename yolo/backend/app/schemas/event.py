@@ -38,6 +38,7 @@ class EventResponse(BaseModel):
     camera_id: UUID
     type: str
     confidence: float
+    roi_name: Optional[str] = None
     snapshot_path: Optional[str] = None
     video_clip_path: Optional[str] = None
     timestamp: datetime

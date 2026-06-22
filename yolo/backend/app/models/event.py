@@ -12,6 +12,7 @@ class Event(Base):
     camera_id = Column(UUID(as_uuid=True), ForeignKey("cameras.id", ondelete="CASCADE"), nullable=False)
     type = Column(String, nullable=False)  # fire, smoke, mobile_usage, intrusion, uniform_violation, smoking, fight, fainting, suicide_risk, projectile
     confidence = Column(Float, nullable=False)
+    roi_name = Column(String, nullable=True)
     snapshot_path = Column(String, nullable=True)
     video_clip_path = Column(String, nullable=True)
     timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)

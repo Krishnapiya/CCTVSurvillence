@@ -102,16 +102,72 @@ def is_schedule_active(event_rule: dict) -> bool:
         print(f"Error checking schedule activity: {e}")
         return False
 
+def _roi_polygon(roi: dict) -> list[tuple[int, int]]:
+    points = roi.get("points", [])
+    if points:
+        return [(int(p["x"]), int(p["y"])) for p in points]
+    if "coords" in roi and roi["coords"]:
+        coords = roi["coords"]
+        left = coords.get("left", 0)
+        top = coords.get("top", 0)
+        width = coords.get("width", 0)
+        height = coords.get("height", 0)
+        return [
+            (int(left), int(top)),
+            (int(left + width), int(top)),
+            (int(left + width), int(top + height)),
+            (int(left), int(top + height)),
+        ]
+    return []
+
+
+def _scaled_bbox_center(bbox: list, frame_shape: tuple) -> tuple[int, int]:
+    h, w = frame_shape[:2]
+    scale_x = 800.0 / w if w > 0 else 1.0
+    scale_y = 450.0 / h if h > 0 else 1.0
+    px = (bbox[0] + bbox[2]) // 2
+    py = (bbox[1] + bbox[3]) // 2
+    return int(px * scale_x), int(py * scale_y)
+
+
+def find_roi_name_for_bbox(
+    bbox: list,
+    rois: list,
+    frame_shape: tuple,
+    mapped_event_types: list[str],
+    active_job_ids: set,
+) -> str | None:
+    """Return ROI name if bbox center lies in an ROI with an active matching rule."""
+    if not rois or not bbox:
+        return None
+
+    point = _scaled_bbox_center(bbox, frame_shape)
+
+    for roi in rois:
+        poly = _roi_polygon(roi)
+        if not is_point_in_polygon(point, poly):
+            continue
+
+        for rule in roi.get("events", []):
+            rule_id = rule.get("id", "")
+            rule_job_id = get_job_id_from_event(rule_id)
+            if not rule_job_id or rule_job_id not in active_job_ids:
+                continue
+
+            rule_types = [t.strip() for t in rule.get("type", "").split(",")]
+            if any(mapped_type in rule_types for mapped_type in mapped_event_types):
+                if is_schedule_active(rule):
+                    return roi.get("name") or "ROI"
+
+    return None
+
+
 def filter_events_by_schedules(events: list, rois: list, frame_shape: tuple, active_job_ids: set) -> list:
     if not rois:
         return []
         
     filtered = []
     h, w = frame_shape[:2]
-    
-    # Calculate scale factor from actual frame resolution to 800x450 canvas resolution
-    scale_x = 800.0 / w if w > 0 else 1.0
-    scale_y = 450.0 / h if h > 0 else 1.0
     
     for event in events:
         event_type = event.get("type")
@@ -122,63 +178,19 @@ def filter_events_by_schedules(events: list, rois: list, frame_shape: tuple, act
         bbox = event.get("details", {}).get("bbox")
         if not bbox and "bbox1" in event.get("details", {}):
             bbox = event["details"]["bbox1"]
-            
-        if bbox:
-            px = (bbox[0] + bbox[2]) // 2
-            py = (bbox[1] + bbox[3]) // 2
-        else:
-            px = w // 2
-            py = h // 2
-            
-        # Scale the point to the frontend canvas space (800x450)
-        point = (int(px * scale_x), int(py * scale_y))
-            
-        matched_roi = None
-        for roi in rois:
-            points = roi.get("points", [])
-            if points:
-                poly = [(int(p["x"]), int(p["y"])) for p in points]
-            elif "coords" in roi and roi["coords"]:
-                coords = roi["coords"]
-                left = coords.get("left", 0)
-                top = coords.get("top", 0)
-                width = coords.get("width", 0)
-                height = coords.get("height", 0)
-                poly = [
-                    (int(left), int(top)),
-                    (int(left + width), int(top)),
-                    (int(left + width), int(top + height)),
-                    (int(left), int(top + height))
-                ]
-            else:
-                poly = []
 
-            if is_point_in_polygon(point, poly):
-                matched_roi = roi
-                break
-                
-        if not matched_roi:
+        roi_name = find_roi_name_for_bbox(
+            bbox or [w // 2, h // 2, w // 2, h // 2],
+            rois,
+            frame_shape,
+            [mapped_type],
+            active_job_ids,
+        )
+        if not roi_name:
             continue
-            
-        roi_events = matched_roi.get("events", [])
-        is_active = False
-        for rule in roi_events:
-            rule_id = rule.get("id", "")
-            rule_job_id = get_job_id_from_event(rule_id)
-            # Only process this rule if its job exists and is active!
-            if not rule_job_id or rule_job_id not in active_job_ids:
-                continue
-                
-            rule_type = rule.get("type", "")
-            rule_types = [t.strip() for t in rule_type.split(",")]
-            if mapped_type in rule_types:
-                if is_schedule_active(rule):
-                    is_active = True
-                    break
-                    
-        if is_active:
-            event["details"]["roi_name"] = matched_roi.get("name", "ROI")
-            filtered.append(event)
+
+        event["details"]["roi_name"] = roi_name
+        filtered.append(event)
             
     return filtered
 
@@ -446,16 +458,29 @@ class StreamProcessor(threading.Thread):
                                 2,
                                 cv2.LINE_AA
                             )
+
+                            with cache_lock:
+                                current_active_ids = set(active_job_ids_cache)
+                            roi_name = None
+                            if hasattr(self, "rois") and self.rois:
+                                roi_name = find_roi_name_for_bbox(
+                                    [x1, y1, x2, y2],
+                                    self.rois,
+                                    (h, w),
+                                    ["Fainting Detection"],
+                                    current_active_ids,
+                                )
                             
                             detection_payload = {
                                 "type": "fainting",
                                 "confidence": confidence,
                                 "details": {
-                                    "bbox": [int(x) for x in bbox],
+                                    "bbox": [x1, y1, x2, y2],
                                     "track_id": track_id,
                                     "peak_velocity": event_details.get("peak_velocity"),
                                     "motion_score": event_details.get("motion_score"),
-                                    "horizontal_duration": event_details.get("horizontal_duration")
+                                    "horizontal_duration": event_details.get("horizontal_duration"),
+                                    "roi_name": roi_name,
                                 }
                             }
                             await self.event_callback(self.camera_id, detection_payload, event_frame)
