@@ -8,9 +8,11 @@ async def main():
         conn = await asyncpg.connect(db_url)
         print("Connected successfully. Adding 'roi_name' column to 'events' table...")
         
-        # Add column if not exists
+        # Add columns if not exists
         await conn.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS roi_name VARCHAR;")
-        print("Column 'roi_name' added successfully.")
+        await conn.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS master_synced_at TIMESTAMP WITH TIME ZONE;")
+        await conn.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS master_clip_synced_at TIMESTAMP WITH TIME ZONE;")
+        print("Columns added successfully.")
         
         # Verify the columns in the events table
         rows = await conn.fetch("""

@@ -21,7 +21,9 @@ EVENT_TYPE_MAPPING = {
     "mobile_usage": "Mobile Phone Detection",
     "bag": "Bag Detection",
     "bench": "Bench Detection",
-    "fainting": "Fainting Detection"
+    "fainting": "Fainting Detection",
+    "fight": "Fight Detection",
+    "smoking": "Smoking Detection"
 }
 
 active_job_ids_cache = set()

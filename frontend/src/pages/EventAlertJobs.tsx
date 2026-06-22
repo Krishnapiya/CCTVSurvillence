@@ -32,6 +32,7 @@ const eventTypes = [
   { name: 'Bench Detection' },
   { name: 'Fainting Detection' },
   { name: 'Fight Detection' },
+  { name: 'Smoking Detection' },
 ];
 
 
@@ -264,7 +265,7 @@ const EventAlertJobs: React.FC = () => {
         {targets.length > 0 ? (
           <Stack direction="row" spacing={1.5}>
             <Button variant="outlined" onClick={() => navigate('/event-jobs')} size="small">Exit Deploy Mode</Button>
-            <Button variant="contained" type="submit" form="job-form" startIcon={<CheckCircle />} sx={{ bgcolor: '#2C3E50' }}>Deploy Job</Button>
+            <Button variant="contained" onClick={handleApplyJobs} startIcon={<CheckCircle />} sx={{ bgcolor: '#2C3E50' }}>Deploy Job</Button>
           </Stack>
         ) : (
           <Button variant="contained" onClick={() => setDeployDialogOpen(true)} startIcon={<Add />} sx={{ bgcolor: '#2C3E50' }}>Deploy New Job</Button>

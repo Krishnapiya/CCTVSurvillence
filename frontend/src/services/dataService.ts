@@ -615,7 +615,8 @@ export const dataService = {
           'bag': 'Bag Detection',
           'bench': 'Bench Detection',
           'fainting': 'Fainting Detection',
-          'fight': 'Fight Detection'
+          'fight': 'Fight Detection',
+          'smoking': 'Smoking Detection'
         };
 
         const mapped = events.map((e: any) => {
