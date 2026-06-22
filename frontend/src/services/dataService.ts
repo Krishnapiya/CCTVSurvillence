@@ -263,7 +263,7 @@ export const dataService = {
     const token = localStorage.getItem('surv_token');
     if (camera.id && !camera.id.startsWith('CAM-')) {
       try {
-        await fetch(`${API_BASE}/cameras/${camera.id}`, {
+        const response = await fetch(`${API_BASE}/cameras/${camera.id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -277,8 +277,16 @@ export const dataService = {
             ...(camera.cameraCode ? { camera_code: camera.cameraCode } : {}),
           })
         });
+        if (!response.ok) {
+          if (response.status === 401) {
+            throw new Error("Unauthorized: Please log in again.");
+          }
+          const errText = await response.text();
+          throw new Error(`Server returned ${response.status}: ${errText}`);
+        }
       } catch (err) {
         console.error('Failed to update camera in backend:', err);
+        throw err;
       }
     }
     const cameras = dataService.getCameras();
@@ -562,9 +570,16 @@ export const dataService = {
           days: backendJob.days,
           cameraIds: backendJob.camera_ids
         };
+      } else {
+        if (response.status === 401) {
+          throw new Error("Unauthorized: Please log in again.");
+        }
+        const errText = await response.text();
+        throw new Error(`Server returned ${response.status}: ${errText}`);
       }
     } catch (err) {
       console.error('Failed to save alert job to backend:', err);
+      throw err;
     }
     const jobs = await dataService.getAlertJobs();
     if (!jobs.some(j => j.id === returnedJob.id)) {

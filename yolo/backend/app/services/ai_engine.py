@@ -38,6 +38,7 @@ class AIEngine:
             if os.path.exists(smoking_path):
                 self._smoking_model = YOLO(smoking_path)
                 self._smoking_model.to(self.device)
+                print(f"Smoking model loaded: {smoking_path}")
             else:
                 print(f"Warning: Smoking model weights not found at {smoking_path}")
 
@@ -94,6 +95,7 @@ class AIEngine:
             print(f"Error running custom fire/smoke model: {e}")
 
         # --- 2. RUN GENERAL PRETRAINED YOLOv11 ---
+        person_boxes = []
         try:
             general_res = self._general_model(frame, verbose=False)
             for r in general_res:
@@ -105,6 +107,7 @@ class AIEngine:
 
                     # Person detection (human_detection)
                     if label == "person" and conf >= 0.5:
+                        person_boxes.append(bbox)
                         events.append({
                             "type": "human_detection",
                             "confidence": conf,
@@ -168,23 +171,48 @@ class AIEngine:
             print(f"Error running pose/fight detection model: {e}")
 
         # --- 4. RUN CUSTOM SMOKING YOLO ---
-        if self._smoking_model is not None:
+        if self._smoking_model is not None and len(person_boxes) > 0:
             try:
-                smoking_res = self._smoking_model(frame, verbose=False)
+                # Use imgsz=640 for trained model compatibility and low conf threshold to capture all options
+                smoking_res = self._smoking_model.predict(frame, conf=0.35, imgsz=640, verbose=False)
                 for r in smoking_res:
                     for box in r.boxes:
+                        conf = float(box.conf[0])
                         cls_id = int(box.cls[0])
                         label = self._smoking_model.names[cls_id].lower()
-                        conf = float(box.conf[0])
+                        print("SMOKING DETECTION:", conf, cls_id, f"({label})")
                         
-                        if conf >= 0.40:
+                        # Set active threshold to 0.50 as requested
+                        if conf >= 0.50:
                             if label in ["smoker", "smoking", "cigarette"]:
                                 bbox = [int(x) for x in box.xyxy[0].tolist()]
-                                events.append({
-                                    "type": "smoking",
-                                    "confidence": conf,
-                                    "details": {"bbox": bbox}
-                                })
+                                
+                                # Enforce human proximity check (smoking requires a human nearby)
+                                s_cx = (bbox[0] + bbox[2]) / 2
+                                s_cy = (bbox[1] + bbox[3]) / 2
+                                is_near_human = False
+                                
+                                for p_box in person_boxes:
+                                    p_w = p_box[2] - p_box[0]
+                                    p_h = p_box[3] - p_box[1]
+                                    
+                                    # Smoking detection center should fall within the person bounding box padded by 40%
+                                    x_min = p_box[0] - 0.4 * p_w
+                                    x_max = p_box[2] + 0.4 * p_w
+                                    y_min = p_box[1] - 0.4 * p_h
+                                    y_max = p_box[3] + 0.4 * p_h
+                                    
+                                    if x_min <= s_cx <= x_max and y_min <= s_cy <= y_max:
+                                        is_near_human = True
+                                        break
+                                        
+                                print(f"Smoking box evaluation: label={label}, conf={conf}, near_human={is_near_human}")
+                                if is_near_human:
+                                    events.append({
+                                        "type": "smoking",
+                                        "confidence": conf,
+                                        "details": {"bbox": bbox}
+                                    })
             except Exception as e:
                 print(f"Error running smoking model: {e}")
 
@@ -272,7 +300,7 @@ class AIEngine:
                 # If minimum distance is within strike range (e.g. 18% of avg height)
                 if min_dist < 0.18 * avg_height:
                     proximity_score = max(0.0, 1.0 - (min_dist / (0.25 * avg_height)))
-                    confidence = 0.55 + 0.45 * proximity_score
+                    confidence = 0.40 + 0.45 * proximity_score
                     
                     events.append({
                         "type": "fight",

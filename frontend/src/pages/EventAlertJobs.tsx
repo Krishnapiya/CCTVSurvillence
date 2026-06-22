@@ -120,43 +120,47 @@ const EventAlertJobs: React.FC = () => {
       cameraIds: Array.from(new Set(targets.map(t => t.camId)))
     };
 
-    // 1. Create the alert job first to get the backend-assigned UUID
-    const savedJob = await dataService.addAlertJob(newJob);
+    try {
+      // 1. Create the alert job first to get the backend-assigned UUID
+      const savedJob = await dataService.addAlertJob(newJob);
 
-    // 2. Map cameras using the correct savedJob.id
-    const updatedCams = cameras.map(cam => {
-      const camTargets = targets.filter(t => t.camId === cam.id);
-      if (camTargets.length > 0) {
-        const targetRoiIds = camTargets.map(t => t.roiId);
-        const currentRois = cam.rois || [];
+      // 2. Map cameras using the correct savedJob.id
+      const updatedCams = cameras.map(cam => {
+        const camTargets = targets.filter(t => t.camId === cam.id);
+        if (camTargets.length > 0) {
+          const targetRoiIds = camTargets.map(t => t.roiId);
+          const currentRois = cam.rois || [];
 
-        const updatedRois = currentRois.map((roi) => {
-          if (targetRoiIds.includes(roi.id)) {
-            return {
-              ...roi,
-              events: [...(roi.events || []), {
-                id: `E-${savedJob.id}-${cam.id}`,
-                type: finalEventTypesStr,
-                startTime: finalStartTime,
-                endTime: finalEndTime,
-                days: finalDays,
-                roiName: roi.name
-              } as any]
-            };
-          }
-          return roi;
-        });
-        return { ...cam, rois: updatedRois };
-      }
-      return cam;
-    });
+          const updatedRois = currentRois.map((roi) => {
+            if (targetRoiIds.includes(roi.id)) {
+              return {
+                ...roi,
+                events: [...(roi.events || []), {
+                  id: `E-${savedJob.id}-${cam.id}`,
+                  type: finalEventTypesStr,
+                  startTime: finalStartTime,
+                  endTime: finalEndTime,
+                  days: finalDays,
+                  roiName: roi.name
+                } as any]
+              };
+            }
+            return roi;
+          });
+          return { ...cam, rois: updatedRois };
+        }
+        return cam;
+      });
 
-    // 3. Save cameras with corrected event IDs
-    await dataService.saveCameras(updatedCams);
+      // 3. Save cameras with corrected event IDs
+      await dataService.saveCameras(updatedCams);
 
-    alert(`Event Configuration "${finalJobName}" deployed.`);
-    navigate('/event-jobs', { replace: true });
-    refreshData();
+      alert(`Event Configuration "${finalJobName}" deployed.`);
+      navigate('/event-jobs', { replace: true });
+      refreshData();
+    } catch (err: any) {
+      alert(`Failed to deploy job: ${err?.message || err || 'Unknown error'}`);
+    }
   };
 
   const openDeleteJobConfirm = (e: React.MouseEvent, job: AlertJob) => {

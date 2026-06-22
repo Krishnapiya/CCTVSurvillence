@@ -103,6 +103,7 @@ class FallStateMachine:
 
         # 2. Velocity calculation
         v_y = calculate_vertical_velocity(state.position_history)
+        print(f"[FAINT DEBUG] State Machine Update - Track={track_id}, Posture={posture}, InstVelocity={v_y:.2f} px/s, PeakVelocity={state.peak_downward_velocity:.2f} px/s")
         logger.info(f"Track={track_id}, InstVelocity={v_y:.2f} px/s, PeakVelocity={state.peak_downward_velocity:.2f} px/s")
         
         # Track peak downward velocity during active motion
@@ -149,11 +150,13 @@ class FallStateMachine:
             if not state.motionless_verified:
                 # How long have they been horizontal?
                 horizontal_duration = current_time - state.motionless_start_time
+                print(f"[FAINT DEBUG] Track={track_id} horizontal duration: {horizontal_duration:.2f}s (threshold={settings.MOTIONLESS_TIME_THRESHOLD}s)")
                 logger.info(f"Horizontal duration = {horizontal_duration:.2f}")
                 
                 if horizontal_duration >= settings.MOTIONLESS_TIME_THRESHOLD:
                     # Verify motionlessness over the last 5 seconds
                     is_motionless, motion_score = verify_motionless(state.position_history, settings.MOTIONLESS_TIME_THRESHOLD)
+                    print(f"[FAINT DEBUG] Alert Check - Track={track_id}, PeakVel={state.peak_downward_velocity:.2f}/{settings.RAPID_FALL_VELOCITY_THRESHOLD}, HorizDuration={horizontal_duration:.2f}/{settings.MOTIONLESS_TIME_THRESHOLD}, Motionless={is_motionless}, MotionScore={motion_score:.2f}")
                     logger.info(
                         f"Alert Check | "
                         f"Track={track_id}, "
@@ -166,15 +169,25 @@ class FallStateMachine:
                         # Verify that this track has actually been VERTICAL in the past to filter out stationary background objects.
                         has_vertical = any(pos == PostureState.VERTICAL for _, pos in state.posture_history)
                         if not has_vertical:
-                            logger.info(f"Ignoring static object track {track_id} (never seen in VERTICAL posture)")
-                            state.motionless_start_time = current_time
-                            return False, 0.0, {}
+                            # Bypass has_vertical check if the person remains horizontal and motionless for at least 8.0 seconds
+                            if horizontal_duration < 8.0:
+                                print(f"[FAINT DEBUG] Ignoring track {track_id} (never seen in VERTICAL posture, horizontal duration {horizontal_duration:.1f}s < 8.0s)")
+                                logger.info(f"Ignoring static object track {track_id} (never seen in VERTICAL posture)")
+                                state.motionless_start_time = current_time
+                                return False, 0.0, {}
+                            else:
+                                print(f"[FAINT DEBUG] Bypassing VERTICAL history requirement for track {track_id} (horizontal duration {horizontal_duration:.1f}s >= 8.0s)")
                             
                         # Verify velocity threshold
                         if state.peak_downward_velocity < settings.RAPID_FALL_VELOCITY_THRESHOLD:
-                            logger.info(f"Ignoring track {track_id} due to low peak velocity ({state.peak_downward_velocity:.1f} px/s < {settings.RAPID_FALL_VELOCITY_THRESHOLD} px/s)")
-                            state.motionless_start_time = current_time
-                            return False, 0.0, {}
+                            # Bypass peak velocity threshold if horizontal and motionless for at least 8.0 seconds
+                            if horizontal_duration < 8.0:
+                                print(f"[FAINT DEBUG] Ignoring track {track_id} due to low peak velocity ({state.peak_downward_velocity:.1f} px/s < {settings.RAPID_FALL_VELOCITY_THRESHOLD} px/s)")
+                                logger.info(f"Ignoring track {track_id} due to low peak velocity ({state.peak_downward_velocity:.1f} px/s < {settings.RAPID_FALL_VELOCITY_THRESHOLD} px/s)")
+                                state.motionless_start_time = current_time
+                                return False, 0.0, {}
+                            else:
+                                print(f"[FAINT DEBUG] Bypassing velocity threshold for track {track_id} (horizontal duration {horizontal_duration:.1f}s >= 8.0s)")
                             
                         state.motionless_verified = True
                         state.alert_triggered = True

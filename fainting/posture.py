@@ -123,6 +123,7 @@ def analyze_posture(bbox: list, keypoints: np.ndarray, keypoints_conf: np.ndarra
         else:
             state = PostureState.VERTICAL
             
+    print(f"[FAINT DEBUG] Posture Analysis - Track={track_id}, Angle={f'{angle:.1f}' if angle is not None else 'None'}, Aspect={aspect_ratio:.2f}, OnFloor={on_floor}, VertLying={is_vertical_lying}, State={state}")
     logger.info(
         f"Track={track_id}, "
         f"Angle={f'{angle:.1f}' if angle is not None else 'None'}, "
