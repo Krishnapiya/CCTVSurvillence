@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Box, 
   Typography, 
@@ -19,7 +19,11 @@ import {
   TableCell,
   TableContainer,
   TableHead,
-  TableRow
+  TableRow,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import { Add, Search, Delete, Edit, Videocam, PlayCircleFilled, Map as MapIcon } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
@@ -32,6 +36,7 @@ const CameraManagement: React.FC = () => {
   const [formData, setFormData] = useState({ id: '', cameraCode: '', name: '', location: '', ip: '' });
   const [isEditing, setIsEditing] = useState(false);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [liveCamera, setLiveCamera] = useState<CameraProfile | null>(null);
 
   const loadCameras = async () => {
@@ -106,11 +111,16 @@ const CameraManagement: React.FC = () => {
     }
   };
 
-  const filteredCameras = cameras.filter(c => 
-    c.name.toLowerCase().includes(search.toLowerCase()) || 
-    c.location.toLowerCase().includes(search.toLowerCase()) ||
-    (c.cameraCode || '').toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredCameras = useMemo(() => cameras.filter(c => {
+    const matchesSearch =
+      c.name.toLowerCase().includes(search.toLowerCase()) ||
+      c.location.toLowerCase().includes(search.toLowerCase()) ||
+      (c.cameraCode || '').toLowerCase().includes(search.toLowerCase()) ||
+      c.ip.toLowerCase().includes(search.toLowerCase());
+    if (!matchesSearch) return false;
+    if (statusFilter && c.status !== statusFilter) return false;
+    return true;
+  }), [cameras, search, statusFilter]);
 
   return (
     <Box>
@@ -126,18 +136,33 @@ const CameraManagement: React.FC = () => {
       </Box>
 
       <Paper sx={{ p: 2, mb: 3, borderRadius: 1, border: '1px solid #DDDDDD' }} elevation={0}>
-        <TextField
-          fullWidth
-          size="small"
-          placeholder="Filter by profile name, location or ID..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start"><Search sx={{ fontSize: 20 }} /></InputAdornment>
-            ),
-          }}
-        />
+        <Stack spacing={2}>
+          <TextField
+            fullWidth
+            size="small"
+            placeholder="Filter by profile name, location, camera code or IP..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start"><Search sx={{ fontSize: 20 }} /></InputAdornment>
+              ),
+            }}
+          />
+          <FormControl size="small" sx={{ minWidth: 200 }}>
+            <InputLabel>Status</InputLabel>
+            <Select
+              label="Status"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <MenuItem value="">All statuses</MenuItem>
+              <MenuItem value="active">Active</MenuItem>
+              <MenuItem value="online">Online</MenuItem>
+              <MenuItem value="offline">Offline</MenuItem>
+            </Select>
+          </FormControl>
+        </Stack>
       </Paper>
 
       <TableContainer component={Paper} sx={{ borderRadius: 1, border: '1px solid #DDDDDD' }} elevation={0}>
