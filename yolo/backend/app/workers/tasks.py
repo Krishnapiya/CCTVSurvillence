@@ -28,15 +28,42 @@ def run_async(coro):
         asyncio.set_event_loop(loop)
     return loop.run_until_complete(coro)
 
-@shared_task(name="app.workers.tasks.process_event_clip_and_verify")
-def process_event_clip_and_verify(
+# Skeleton connection pairs for YOLOv11 Pose (17 keypoints)
+SKELETON_CONNECTIONS = [
+    (0, 1), (0, 2), (1, 3), (2, 4), # Face
+    (5, 6),                         # Shoulders
+    (5, 7), (7, 9),                 # Left arm
+    (6, 8), (8, 10),                # Right arm
+    (11, 12),                       # Hips
+    (5, 11), (6, 12),               # Torso (shoulders to hips)
+    (11, 13), (13, 15),             # Left leg
+    (12, 14), (14, 16)              # Right leg
+]
+
+def draw_skeleton(frame, keypoints, keypoints_conf, confidence_threshold=0.5):
+    """
+    Draws the pose skeleton on the frame.
+    """
+    # Draw connections
+    for pt1_idx, pt2_idx in SKELETON_CONNECTIONS:
+        if keypoints_conf[pt1_idx] > confidence_threshold and keypoints_conf[pt2_idx] > confidence_threshold:
+            x1, y1 = int(keypoints[pt1_idx][0]), int(keypoints[pt1_idx][1])
+            x2, y2 = int(keypoints[pt2_idx][0]), int(keypoints[pt2_idx][1])
+            cv2.line(frame, (x1, y1), (x2, y2), (255, 255, 255), 2)
+            
+    # Draw keypoint dots
+    for idx, (x, y) in enumerate(keypoints):
+        if keypoints_conf[idx] > confidence_threshold:
+            cv2.circle(frame, (int(x), int(y)), 4, (0, 165, 255), -1) # Orange dots
+
+async def async_process_event_clip_and_verify(
     event_id: str,
     camera_id: str,
     temp_frames_dir: str,
     event_type: str,
     snapshot_path: str
 ):
-    print(f"Celery task started for Event: {event_id}, Type: {event_type}")
+    print(f"Async processing started for Event: {event_id}, Type: {event_type}")
     
     if not temp_frames_dir or not os.path.exists(temp_frames_dir):
         print(f"Temp frames directory not found for Event: {event_id}")
@@ -50,7 +77,7 @@ def process_event_clip_and_verify(
         if time.time() - poll_start > timeout_limit:
             print(f"Timeout waiting for complete.txt for Event: {event_id}. Compiling partial frames.")
             break
-        time.sleep(0.5)
+        await asyncio.sleep(0.5)
 
     # 2. Compile video clip from frames
     clip_filename = f"{event_id}.mp4"
@@ -63,33 +90,45 @@ def process_event_clip_and_verify(
     duration = 10.0
     file_size = 0
 
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+    db_url = settings.DATABASE_URL
+    if db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        
+    task_engine = create_async_engine(db_url, future=True)
+    TaskSessionLocal = async_sessionmaker(
+        bind=task_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autocommit=False,
+        autoflush=False
+    )
+
     # Fetch active alert rules for this camera to filter bounding boxes
-    async def get_allowed_yolo_types():
+    allowed_types = set()
+    try:
         from app.repositories.camera import CameraRepository
         from app.models.alert_job import AlertJob
         from sqlalchemy.future import select
         
-        async with AsyncSessionLocal() as session:
-            try:
-                # 1. Get active alert job IDs
-                stmt = select(AlertJob).filter(AlertJob.is_active == True)
-                res = await session.execute(stmt)
-                active_job_ids = {str(job.id) for job in res.scalars().all()}
-                
-                # 2. Get camera
-                cam_repo = CameraRepository(session)
-                camera = await cam_repo.get(UUID(camera_id))
-                if not camera:
-                    return set()
-                    
-                allowed = set()
+        async with TaskSessionLocal() as session:
+            # 1. Get active alert job IDs
+            stmt = select(AlertJob).filter(AlertJob.is_active == True)
+            res = await session.execute(stmt)
+            active_job_ids = {str(job.id) for job in res.scalars().all()}
+            
+            # 2. Get camera
+            cam_repo = CameraRepository(session)
+            camera = await cam_repo.get(UUID(camera_id))
+            if camera:
                 mapping = {
                     "Human Detection": ["human_detection", "intrusion"],
                     "Mobile Phone Detection": ["mobile_usage"],
                     "Fire Detection": ["fire"],
                     "Smoke Detection": ["smoke"],
                     "Bag Detection": ["bag"],
-                    "Bench Detection": ["bench"]
+                    "Bench Detection": ["bench"],
+                    "Fainting Detection": ["fainting"]
                 }
                 
                 for roi in camera.rois:
@@ -104,13 +143,10 @@ def process_event_clip_and_verify(
                                     for part in rule_type.split(","):
                                         t = part.strip()
                                         if t in mapping:
-                                            allowed.update(mapping[t])
-                return allowed
-            except Exception as ex:
-                print(f"Error getting allowed yolo types: {ex}")
-                return set()
+                                            allowed_types.update(mapping[t])
+    except Exception as ex:
+        print(f"Error getting allowed yolo types: {ex}")
 
-    allowed_types = run_async(get_allowed_yolo_types())
     if not allowed_types:
         allowed_types = {event_type}
     print(f"Allowed YOLO types for camera {camera_id} video annotation: {allowed_types}")
@@ -125,40 +161,83 @@ def process_event_clip_and_verify(
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             video_writer = cv2.VideoWriter(clip_path, fourcc, 15.0, (w, h))
             
+            use_fainting = (event_type == "fainting" or "fainting" in allowed_types)
+            if use_fainting:
+                import sys
+                fainting_dir = "/data/hfllama/survialance/fainting"
+                if fainting_dir not in sys.path:
+                    sys.path.insert(0, fainting_dir)
+                from tracker import PersonTracker
+                from posture import analyze_posture, PostureState
+                
+                clip_tracker = PersonTracker()
+
             from app.services.ai_engine import ai_engine
             for f in frame_files:
                 img = cv2.imread(f)
                 if img is not None:
-                    try:
-                        # Detect objects on the frame
-                        events = run_async(ai_engine.detect_frame(camera_id, img))
-                        # Draw boxes on the frame
-                        for event in events:
-                            etype = event["type"]
-                            # Only draw box if this event type is configured and active
-                            if etype not in allowed_types:
-                                continue
+                    if use_fainting:
+                        try:
+                            persons = clip_tracker.update(img)
+                            for person in persons:
+                                track_id = person["track_id"]
+                                bbox = person["bbox"]
+                                keypoints = person["keypoints"]
+                                kp_conf = person["keypoints_conf"]
                                 
-                            conf = event["confidence"]
-                            details = event["details"]
-                            
-                            # Define box color based on event type
-                            if etype in ["fire", "smoke", "intrusion"]:
-                                color = (0, 0, 255) # Red
-                            elif etype == "fight":
-                                color = (0, 165, 255) # Orange
-                            elif etype in ["mobile_usage", "smoking"]:
-                                color = (255, 0, 255) # Purple
-                            else:
-                                color = (0, 255, 0) # Green
+                                state, angle, aspect_ratio = analyze_posture(bbox, keypoints, kp_conf, track_id)
                                 
-                            if "bbox" in details:
-                                x1, y1, x2, y2 = details["bbox"]
+                                # Draw skeleton
+                                draw_skeleton(img, keypoints, kp_conf)
+                                
+                                # Choose box color based on posture state
+                                if state == PostureState.VERTICAL:
+                                    color = (0, 255, 0) # Green
+                                elif state == PostureState.FALLING:
+                                    color = (0, 165, 255) # Orange
+                                else: # HORIZONTAL
+                                    color = (0, 0, 255) # Red
+                                    
+                                x1, y1, x2, y2 = map(int, bbox)
                                 cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
-                                label = f"{etype.upper()} ({conf:.2f})"
-                                cv2.putText(img, label, (x1, max(15, y1 - 5)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
-                    except Exception as det_err:
-                        print(f"Error annotating frame {f} for video clip: {det_err}")
+                                
+                                label = f"ID:{track_id} | {state}"
+                                if angle is not None:
+                                    label += f" | Angle: {angle:.1f}"
+                                cv2.putText(img, label, (x1, max(15, y1 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+                        except Exception as ex:
+                            print(f"Error drawing fainting overlay on video clip frame: {ex}")
+                    else:
+                        try:
+                            # Detect objects on the frame
+                            events = await ai_engine.detect_frame(camera_id, img)
+                            # Draw boxes on the frame
+                            for event in events:
+                                etype = event["type"]
+                                # Only draw box if this event type is configured and active
+                                if etype not in allowed_types:
+                                    continue
+                                    
+                                conf = event["confidence"]
+                                details = event["details"]
+                                
+                                # Define box color based on event type
+                                if etype in ["fire", "smoke", "intrusion"]:
+                                    color = (0, 0, 255) # Red
+                                elif etype == "fight":
+                                    color = (0, 165, 255) # Orange
+                                elif etype in ["mobile_usage", "smoking"]:
+                                    color = (255, 0, 255) # Purple
+                                else:
+                                    color = (0, 255, 0) # Green
+                                    
+                                if "bbox" in details:
+                                    x1, y1, x2, y2 = details["bbox"]
+                                    cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
+                                    label = f"{etype.upper()} ({conf:.2f})"
+                                    cv2.putText(img, label, (x1, max(15, y1 - 5)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+                        except Exception as det_err:
+                            print(f"Error annotating frame {f} for video clip: {det_err}")
                     video_writer.write(img)
             
             video_writer.release()
@@ -191,9 +270,7 @@ def process_event_clip_and_verify(
     }
 
     if event_type in qwen_prompts:
-        qwen_res, qwen_conf, qwen_detail = run_async(
-            ai_verification_service.verify_with_qwen_vl(snapshot_path, qwen_prompts[event_type])
-        )
+        qwen_res, qwen_conf, qwen_detail = await ai_verification_service.verify_with_qwen_vl(snapshot_path, qwen_prompts[event_type])
         verification_results.append({
             "service_name": "Qwen2.5-VL",
             "result": qwen_res,
@@ -201,8 +278,6 @@ def process_event_clip_and_verify(
             "details": {"reasoning": qwen_detail}
         })
     elif event_type == "fight":
-        # Compile frames list for MoViNet action recognition
-        # In a real environment, we'd pass downscaled frames; here we run the flow estimator
         test_frames = []
         if clip_path and os.path.exists(clip_path):
             cap = cv2.VideoCapture(clip_path)
@@ -215,9 +290,7 @@ def process_event_clip_and_verify(
                     break
             cap.release()
 
-        movinet_res, movinet_conf = run_async(
-            ai_verification_service.verify_fight_movinet(test_frames)
-        )
+        movinet_res, movinet_conf = await ai_verification_service.verify_fight_movinet(test_frames)
         verification_results.append({
             "service_name": "MoViNet",
             "result": movinet_res,
@@ -225,11 +298,8 @@ def process_event_clip_and_verify(
             "details": {"info": "Optical flow activity analysis of clip frames."}
         })
     elif event_type == "fainting":
-        # Mock keypoints for verification
         mock_kps = {"shoulder": (0.5, 0.6), "hip": (0.5, 0.58), "left_ankle": (0.5, 0.55), "left_shoulder": (0.5, 0.6)}
-        movenet_res, movenet_conf = run_async(
-            ai_verification_service.verify_fainting_movenet(mock_kps)
-        )
+        movenet_res, movenet_conf = await ai_verification_service.verify_fainting_movenet(mock_kps)
         verification_results.append({
             "service_name": "MoveNet",
             "result": movenet_res,
@@ -238,22 +308,9 @@ def process_event_clip_and_verify(
         })
 
     # 4. Save to Database
-    async def update_db():
-        from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-        db_url = settings.DATABASE_URL
-        if db_url.startswith("postgresql://"):
-            db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-
-        bg_engine = create_async_engine(db_url, future=True)
-        BgSessionLocal = async_sessionmaker(
-            bind=bg_engine,
-            class_=AsyncSession,
-            expire_on_commit=False,
-            autocommit=False,
-            autoflush=False
-        )
-
-        async with BgSessionLocal() as db:
+    primary_verification = "VERIFIED"
+    try:
+        async with TaskSessionLocal() as db:
             event_repo = EventRepository(db)
             clip_repo = VideoClipRepository(db)
             verif_repo = EventVerificationRepository(db)
@@ -275,7 +332,6 @@ def process_event_clip_and_verify(
                 })
 
             # Save verification results
-            primary_verification = "VERIFIED"
             for v_data in verification_results:
                 await verif_repo.create({
                     "event_id": event_uuid,
@@ -288,19 +344,45 @@ def process_event_clip_and_verify(
                     primary_verification = "REFUTED"
 
             await db.commit()
-        await bg_engine.dispose()
-        return primary_verification
-
-    primary_verif = run_async(update_db())
+    except Exception as db_err:
+        print(f"Error updating database in background task: {db_err}")
 
     # 5. Broadcast verification results via WebSockets
-    run_async(ws_manager.broadcast({
-        "msg_type": "verification_result",
-        "verification": {
-            "event_id": event_id,
-            "result": primary_verif,
-            "video_clip_url": f"/media/clips/{clip_filename}",
-            "verifications": verification_results
-        }
-    }))
-    print(f"Event {event_id} finished processing. Verification: {primary_verif}")
+    try:
+        await ws_manager.broadcast({
+            "msg_type": "verification_result",
+            "verification": {
+                "event_id": event_id,
+                "result": primary_verification,
+                "video_clip_url": f"/media/clips/{clip_filename}",
+                "verifications": verification_results
+            }
+        })
+    except Exception as ws_err:
+        print(f"Error broadcasting via WebSocket: {ws_err}")
+
+    await task_engine.dispose()
+    print(f"Event {event_id} finished processing. Verification: {primary_verification}")
+    return primary_verification
+
+@shared_task(name="app.workers.tasks.process_event_clip_and_verify")
+def process_event_clip_and_verify(
+    event_id: str,
+    camera_id: str,
+    temp_frames_dir: str,
+    event_type: str,
+    snapshot_path: str
+):
+    print(f"Celery/Background task started for Event: {event_id}, Type: {event_type}")
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+        return loop.run_until_complete(
+            async_process_event_clip_and_verify(
+                event_id, camera_id, temp_frames_dir, event_type, snapshot_path
+            )
+        )
+    except Exception as e:
+        print(f"Error running local clip & verify task: {e}")
+    finally:
+        loop.close()

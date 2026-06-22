@@ -1,0 +1,1130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SentryPose AI - CCTV Fall & Fainting Detection Gateway</title>
+    <!-- Google Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0b0c10;
+            --panel-bg: rgba(21, 26, 38, 0.6);
+            --panel-border: rgba(255, 255, 255, 0.08);
+            --text-primary: #f5f6f9;
+            --text-secondary: #8f9cae;
+            --accent-red: #ff3b30;
+            --accent-red-rgb: 255, 59, 48;
+            --accent-green: #34c759;
+            --accent-green-rgb: 52, 199, 89;
+            --accent-blue: #007aff;
+            --accent-orange: #ff9500;
+            --shadow-premium: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            --blur-amount: 12px;
+            --border-radius: 16px;
+            --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            margin: 0;
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(0, 122, 255, 0.05) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(255, 59, 48, 0.04) 0px, transparent 50%);
+            background-attachment: fixed;
+        }
+        .glass-panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(var(--blur-amount));
+            -webkit-backdrop-filter: blur(var(--blur-amount));
+            border: 1px solid var(--panel-border);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow-premium);
+            transition: var(--transition-smooth);
+        }
+        .glass-panel:hover { border-color: rgba(255, 255, 255, 0.12); }
+        .dashboard-container {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            min-height: 100vh;
+        }
+        .dashboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 24px;
+            position: relative;
+            overflow: hidden;
+        }
+        .dashboard-header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: linear-gradient(180deg, var(--accent-blue), var(--accent-red));
+        }
+        .brand-section { display: flex; align-items: center; gap: 12px; }
+        .brand-logo { color: var(--accent-red); display: flex; align-items: center; justify-content: center; }
+        .brand-logo.active-alert { animation: pulse-red 2s infinite; }
+        .brand-title h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            background: linear-gradient(90deg, #fff, var(--text-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .brand-title p { font-size: 0.8rem; color: var(--text-secondary); }
+        .status-section { display: flex; align-items: center; gap: 20px; }
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 8px 14px;
+            border-radius: 30px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; position: relative; }
+        .status-dot.active {
+            background-color: var(--accent-green);
+            box-shadow: 0 0 8px var(--accent-green);
+        }
+        .status-dot.active::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background-color: var(--accent-green);
+            animation: ripple-green 1.5s infinite;
+        }
+        .alert-counter {
+            background: rgba(255, 59, 48, 0.15);
+            color: var(--accent-red);
+            border: 1px solid rgba(255, 59, 48, 0.3);
+            padding: 8px 14px;
+            border-radius: 30px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .dashboard-grid { display: grid; grid-template-columns: 8fr 4fr; gap: 24px; }
+        @media (max-width: 1024px) {
+            .dashboard-grid { grid-template-columns: 1fr; }
+        }
+        .feed-panel { display: flex; flex-direction: column; overflow: hidden; height: 520px; }
+        .feed-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--panel-border);
+        }
+        .feed-title { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+        .live-badge {
+            background-color: var(--accent-red);
+            color: #fff;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            animation: pulse-opacity 1.5s infinite;
+        }
+        .feed-viewports {
+            flex-grow: 1;
+            background-color: #040508;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+        .video-element { max-width: 100%; max-height: 100%; object-fit: contain; }
+        .feed-overlay-info {
+            position: absolute;
+            bottom: 16px;
+            left: 16px;
+            background: rgba(0, 0, 0, 0.65);
+            backdrop-filter: blur(4px);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .incident-panel { display: flex; flex-direction: column; height: 520px; }
+        .panel-title {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--panel-border);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .incident-content {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 24px;
+            flex-grow: 1;
+            text-align: center;
+        }
+        .no-alerts-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            color: var(--text-secondary);
+        }
+        .no-alerts-icon { color: var(--accent-green); opacity: 0.6; }
+        .alert-active-state { width: 100%; display: flex; flex-direction: column; gap: 20px; animation: slide-in 0.4s ease-out; }
+        .alert-banner-top {
+            background: rgba(255, 59, 48, 0.1);
+            border: 1px solid rgba(255, 59, 48, 0.25);
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-align: left;
+        }
+        .alert-banner-icon { color: var(--accent-red); animation: shake 0.5s ease infinite; }
+        .alert-banner-text h3 { color: var(--accent-red); font-size: 1.1rem; font-weight: 700; margin-bottom: 2px; }
+        .alert-banner-text p { font-size: 0.8rem; color: var(--text-secondary); }
+        .alert-screenshot-preview {
+            width: 100%;
+            height: 180px;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+            cursor: pointer;
+        }
+        .alert-screenshot-preview img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s ease; }
+        .alert-screenshot-preview:hover img { transform: scale(1.05); }
+        .preview-badge {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .stat-item {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            padding: 12px;
+            text-align: left;
+        }
+        .stat-label { font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 4px; }
+        .stat-value { font-size: 1.1rem; font-weight: 600; }
+        .stat-value.high-confidence { color: var(--accent-red); }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-red), #b3241d);
+            color: #fff;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: var(--transition-smooth);
+            font-family: inherit;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(255, 59, 48, 0.3);
+        }
+        .history-section { display: flex; flex-direction: column; gap: 16px; }
+        .history-panel { padding: 24px; }
+        .history-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .history-title h2 { font-size: 1.25rem; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+        .btn-icon {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--panel-border);
+            color: var(--text-primary);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: var(--transition-smooth);
+        }
+        .btn-icon:hover { background: rgba(255, 255, 255, 0.1); }
+        .table-wrapper { overflow-x: auto; border-radius: 8px; border: 1px solid var(--panel-border); }
+        .events-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem; }
+        .events-table th, .events-table td { padding: 14px 16px; }
+        .events-table th {
+            background-color: rgba(255, 255, 255, 0.03);
+            font-weight: 600;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--panel-border);
+        }
+        .events-table td { border-bottom: 1px solid rgba(255, 255, 255, 0.04); }
+        .events-table tr:hover td { background-color: rgba(255, 255, 255, 0.01); }
+        .confidence-badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600; }
+        .confidence-badge.high {
+            background: rgba(255, 59, 48, 0.15);
+            color: var(--accent-red);
+            border: 1px solid rgba(255, 59, 48, 0.25);
+        }
+        .confidence-badge.medium {
+            background: rgba(255, 149, 0, 0.15);
+            color: var(--accent-orange);
+            border: 1px solid rgba(255, 149, 0, 0.25);
+        }
+        .btn-table-action {
+            background: rgba(0, 122, 255, 0.1);
+            border: 1px solid rgba(0, 122, 255, 0.2);
+            color: var(--accent-blue);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition-smooth);
+        }
+        .btn-table-action:hover { background: var(--accent-blue); color: #fff; }
+        .empty-table-state { text-align: center; color: var(--text-secondary); padding: 40px; }
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(4, 5, 8, 0.85);
+            backdrop-filter: blur(8px);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            animation: fade-in 0.25s ease-out;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-content {
+            width: 90%;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-bottom: 1px solid var(--panel-border); }
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 4px;
+            border-radius: 50%;
+            transition: var(--transition-smooth);
+        }
+        .modal-close:hover { background: rgba(255, 255, 255, 0.05); color: #fff; }
+        .modal-body { padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+        .modal-media-viewer {
+            width: 100%;
+            height: 380px;
+            background-color: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--panel-border);
+        }
+        .modal-media-viewer img, .modal-media-viewer video { width: 100%; height: 100%; object-fit: contain; }
+        .modal-meta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+        @media (max-width: 600px) {
+            .modal-meta-grid { grid-template-columns: 1fr; }
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        @keyframes pulse-red {
+            0% { transform: scale(1); filter: drop-shadow(0 0 2px rgba(255, 59, 48, 0.4)); }
+            50% { transform: scale(1.05); filter: drop-shadow(0 0 10px rgba(255, 59, 48, 0.7)); }
+            100% { transform: scale(1); filter: drop-shadow(0 0 2px rgba(255, 59, 48, 0.4)); }
+        }
+        @keyframes ripple-green {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.6); opacity: 0.3; }
+            100% { transform: scale(2.2); opacity: 0; }
+        }
+        @keyframes pulse-opacity { 0% { opacity: 0.3; } 50% { opacity: 1; } 100% { opacity: 0.3; } }
+        @keyframes slide-in { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes shake {
+            0% { transform: rotate(0deg); }
+            20% { transform: rotate(-8deg); }
+            40% { transform: rotate(6deg); }
+            60% { transform: rotate(-4deg); }
+            80% { transform: rotate(3deg); }
+            100% { transform: rotate(0deg); }
+        }
+        .upload-zone {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 90%;
+            height: 80%;
+            padding: 30px;
+            border: 2px dashed rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.01);
+            transition: var(--transition-smooth);
+            text-align: center;
+        }
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: var(--accent-blue);
+            background: rgba(0, 122, 255, 0.04);
+        }
+        .upload-icon {
+            width: 48px;
+            height: 48px;
+            color: var(--accent-blue);
+            margin-bottom: 16px;
+            opacity: 0.8;
+            transition: var(--transition-smooth);
+        }
+        .upload-zone:hover .upload-icon {
+            transform: translateY(-4px) scale(1.05);
+            opacity: 1;
+        }
+        .upload-zone h3 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .upload-zone p {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+        }
+        .btn-upload {
+            padding: 10px 20px;
+            font-size: 0.9rem;
+        }
+        .upload-status {
+            margin-top: 15px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        .upload-status.success { color: var(--accent-green); }
+        .upload-status.error { color: var(--accent-red); }
+        .upload-status.loading {
+            color: var(--accent-blue);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .upload-actions-bar {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            display: flex;
+            gap: 10px;
+            z-index: 10;
+        }
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--panel-border);
+            color: var(--text-primary);
+            padding: 8px 14px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition-smooth);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+        .lucide-icon {
+            width: 20px;
+            height: 20px;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
+            display: inline-block;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Header -->
+        <header class="dashboard-header glass-panel">
+            <div class="brand-section">
+                <div id="brand-logo-container" class="brand-logo">
+                    <!-- Dynamic logo -->
+                </div>
+                <div class="brand-title">
+                    <h1>SentryPose AI</h1>
+                    <p>CCTV Fall & Fainting Detection Gateway</p>
+                </div>
+            </div>
+
+            <div class="status-section">
+                <div class="status-indicator">
+                    <div id="connection-dot" class="status-dot"></div>
+                    <span id="connection-text">Connecting to API...</span>
+                </div>
+                
+                <div class="alert-counter">
+                    <span id="incident-counter-text">0 Incidents Logged</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Body Grid -->
+        <div class="dashboard-grid">
+            <!-- Feed Panel -->
+            <section class="feed-panel glass-panel">
+                <div class="feed-header">
+                    <div class="feed-title">
+                        <span id="feed-status-icon"></span>
+                        <span>Surveillance Video Feed</span>
+                        <span class="live-badge" style="display: none">Live</span>
+                    </div>
+                    <div id="feed-source-text" style="color: var(--text-secondary); font-size: 0.8rem">
+                        Source: Awaiting Upload
+                    </div>
+                </div>
+                <div class="feed-viewports" id="video-stream-container">
+                    <!-- Dynamic live stream element -->
+                </div>
+            </section>
+
+            <!-- Monitor Panel -->
+            <section class="incident-panel glass-panel">
+                <div class="panel-title" id="monitor-panel-title">
+                    <!-- Dynamic title -->
+                </div>
+                
+                <div class="incident-content" id="monitor-panel-content">
+                    <!-- Dynamic active state -->
+                </div>
+            </section>
+        </div>
+
+        <!-- History Log Section -->
+        <section class="history-section">
+            <div class="history-panel glass-panel">
+                <div class="history-title">
+                    <h2>
+                        <span id="history-header-icon"></span>
+                        <span>Historical Fall Incident Logs</span>
+                    </h2>
+                    <button class="btn-icon" onclick="manualRefresh()" title="Refresh Logs" id="refresh-button">
+                        <!-- Dynamic refresh icon -->
+                    </button>
+                </div>
+                
+                <div class="table-wrapper">
+                    <table class="events-table">
+                        <thead>
+                            <tr>
+                                <th>Event ID</th>
+                                <th>Person ID</th>
+                                <th>Timestamp</th>
+                                <th>Confidence</th>
+                                <th>Key Metrics</th>
+                                <th>Screenshots</th>
+                                <th>Video Clip</th>
+                            </tr>
+                        </thead>
+                        <tbody id="events-table-body">
+                            <tr>
+                                <td colspan="7" class="empty-table-state">
+                                    Fetching historical database events...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Media Modals -->
+    <div class="modal-overlay" id="media-modal" onclick="closeModal()">
+        <div class="modal-content glass-panel" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 id="modal-title-text">Incident Media Viewer</h3>
+                <button class="modal-close" onclick="closeModal()" id="modal-close-icon-container">
+                    <!-- Dynamic X icon -->
+                </button>
+            </div>
+            
+            <div class="modal-body">
+                <div class="modal-media-viewer" id="modal-media-container">
+                    <!-- Dynamic Media -->
+                </div>
+                
+                <div class="modal-meta-grid" id="modal-meta-container">
+                    <!-- Dynamic Metadata -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Offline-Capable SVG Icon Database -->
+    <script>
+        const SVGS = {
+            shieldAlert: `<svg class="lucide-icon" style="width:28px;height:28px" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 9.7a1 1 0 0 1-.68 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 .76-.97l8-2a1 1 0 0 1 .48 0l8 2A1 1 0 0 1 20 6v7z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>`,
+            activity: `<svg class="lucide-icon" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`,
+            alertTriangle: `<svg class="lucide-icon" style="color:var(--accent-red)" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+            checkCircle: `<svg class="lucide-icon" style="width:48px;height:48px;color:var(--accent-green)" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+            database: `<svg class="lucide-icon" style="color:var(--accent-blue)" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg>`,
+            clock: `<svg class="lucide-icon" style="width:14px;height:14px;color:var(--text-secondary)" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+            refreshCw: `<svg class="lucide-icon" style="width:16px;height:16px" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>`,
+            eye: `<svg class="lucide-icon" style="width:12px;height:12px;margin-right:4px" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`,
+            video: `<svg class="lucide-icon" style="width:12px;height:12px;margin-right:4px" viewBox="0 0 24 24"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>`,
+            x: `<svg class="lucide-icon" style="width:20px;height:20px" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`,
+            play: `<svg class="lucide-icon" style="width:16px;height:16px" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></svg>`,
+            maximize2: `<svg class="lucide-icon" style="width:12px;height:12px" viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>`,
+            uploadCloudLarge: `<svg viewBox="0 0 24 24" style="width: 56px; height: 56px; stroke: var(--accent-blue); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; fill: none; margin-bottom: 16px; filter: drop-shadow(0 0 8px rgba(0, 122, 255, 0.4))"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg>`,
+            uploadCloudSmall: `<svg viewBox="0 0 24 24" style="width: 16px; height: 16px; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; fill: none; display: inline-block; vertical-align: middle; margin-right: 4px"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg>`
+        };
+
+        // Populate Static Icons
+        document.getElementById('brand-logo-container').innerHTML = SVGS.shieldAlert;
+        document.getElementById('feed-status-icon').innerHTML = SVGS.activity;
+        document.getElementById('monitor-panel-title').innerHTML = SVGS.alertTriangle + ' <span>Active Incident Monitor</span>';
+        document.getElementById('history-header-icon').innerHTML = SVGS.database;
+        document.getElementById('refresh-button').innerHTML = SVGS.refreshCw;
+        document.getElementById('modal-close-icon-container').innerHTML = SVGS.x;
+    </script>
+
+    <!-- UI State, Fetching, and Rendering Logic -->
+    <script>
+        const BACKEND_URL = window.location.origin;
+        
+        let state = {
+            events: [],
+            latestEvent: null,
+            apiConnected: false,
+            activeAlert: null,
+            isUploadMode: true,
+            uploadedFileName: null
+        };
+
+        const playNotificationSound = () => {
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(880, audioContext.currentTime); 
+                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                
+                oscillator.start();
+                oscillator.stop(audioContext.currentTime + 0.15);
+                
+                setTimeout(() => {
+                    const osc2 = audioContext.createOscillator();
+                    const gain2 = audioContext.createGain();
+                    osc2.connect(gain2);
+                    gain2.connect(audioContext.destination);
+                    osc2.type = 'sine';
+                    osc2.frequency.setValueAtTime(880, audioContext.currentTime);
+                    gain2.gain.setValueAtTime(0.3, audioContext.currentTime);
+                    osc2.start();
+                    osc2.stop(audioContext.currentTime + 0.25);
+                }, 200);
+            } catch (e) {
+                console.warn("Audio Context blocked.");
+            }
+        };
+
+        const formatRelativeTime = (isoString) => {
+            if (!isoString) return '';
+            const date = new Date(isoString);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffSec = Math.floor(diffMs / 1000);
+            const diffMin = Math.floor(diffSec / 60);
+            
+            if (diffSec < 60) return 'Just now';
+            if (diffMin < 60) return `${diffMin}m ago`;
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        };
+
+        // Render functions
+        const renderHeader = () => {
+            const dot = document.getElementById('connection-dot');
+            const text = document.getElementById('connection-text');
+            const counter = document.getElementById('incident-counter-text');
+            const logo = document.getElementById('brand-logo-container');
+
+            if (state.apiConnected) {
+                dot.className = "status-dot active";
+                text.textContent = "API Connected";
+            } else {
+                dot.className = "status-dot";
+                text.textContent = "Connecting to API...";
+            }
+
+            counter.textContent = `${state.events.length} Incident${state.events.length !== 1 ? 's' : ''} Logged`;
+
+            if (state.activeAlert) {
+                logo.classList.add('active-alert');
+            } else {
+                logo.classList.remove('active-alert');
+            }
+        };
+
+        const setupDragAndDrop = () => {
+            const zone = document.getElementById('upload-zone');
+            if (!zone) return;
+            
+            ['dragenter', 'dragover'].forEach(eventName => {
+                zone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    zone.classList.add('dragover');
+                }, false);
+            });
+            
+            ['dragleave', 'drop'].forEach(eventName => {
+                zone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    zone.classList.remove('dragover');
+                }, false);
+            });
+            
+            zone.addEventListener('drop', (e) => {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                if (files.length > 0) {
+                    uploadFile(files[0]);
+                }
+            }, false);
+        };
+
+        const uploadFile = async (file) => {
+            const statusDiv = document.getElementById('upload-status');
+            if (statusDiv) {
+                statusDiv.className = 'upload-status loading';
+                statusDiv.innerHTML = `Uploading "${file.name}"...`;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                const response = await fetch(`${BACKEND_URL}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                if (data.status === 'success') {
+                    state.isUploadMode = false;
+                    state.uploadedFileName = file.name;
+                    renderVideoFeed();
+                } else {
+                    if (statusDiv) {
+                        statusDiv.className = 'upload-status error';
+                        statusDiv.innerText = `Error: ${data.message}`;
+                    }
+                }
+            } catch (err) {
+                if (statusDiv) {
+                    statusDiv.className = 'upload-status error';
+                    statusDiv.innerText = `Failed to upload: ${err.message}`;
+                }
+            }
+        };
+        
+        window.handleFileSelect = (event) => {
+            const files = event.target.files;
+            if (files.length > 0) {
+                uploadFile(files[0]);
+            }
+        };
+        
+        window.switchToUploadMode = () => {
+            state.isUploadMode = true;
+            renderVideoFeed();
+        };
+
+        const renderVideoFeed = () => {
+            const container = document.getElementById('video-stream-container');
+            const sourceText = document.getElementById('feed-source-text');
+            const liveBadge = document.querySelector('.live-badge');
+            
+            if (state.isUploadMode) {
+                if (sourceText) sourceText.textContent = "Source: Awaiting Upload";
+                if (liveBadge) {
+                    liveBadge.style.display = 'none';
+                }
+                
+                if (!document.getElementById('upload-zone')) {
+                    container.innerHTML = `
+                        <div class="upload-zone" id="upload-zone" onclick="document.getElementById('video-file-input').click()">
+                            ${SVGS.uploadCloudLarge}
+                            <h3>Drag & Drop Video File</h3>
+                            <p>Supports MP4, AVI, MOV, MKV (Max 100MB)</p>
+                            <button class="btn-primary btn-upload" onclick="event.stopPropagation(); document.getElementById('video-file-input').click()">
+                                Select File
+                            </button>
+                            <input type="file" id="video-file-input" accept="video/*" style="display: none" onchange="handleFileSelect(event)" />
+                            <div id="upload-status" class="upload-status"></div>
+                        </div>
+                    `;
+                    setupDragAndDrop();
+                }
+            } else {
+                if (sourceText) sourceText.textContent = `Source: ${state.uploadedFileName || 'Uploaded Video'}`;
+                if (liveBadge) {
+                    liveBadge.style.display = 'inline-block';
+                    liveBadge.textContent = "Processing";
+                    liveBadge.style.backgroundColor = 'var(--accent-blue)';
+                }
+                
+                if (!document.getElementById('mjpeg-stream-img')) {
+                    container.innerHTML = `
+                        <div class="upload-actions-bar">
+                            <button class="btn-secondary" onclick="switchToUploadMode()">
+                                ${SVGS.uploadCloudSmall} Upload New Video
+                            </button>
+                        </div>
+                        <img 
+                            id="mjpeg-stream-img"
+                            src="${BACKEND_URL}/video_feed?t=${Date.now()}" 
+                            alt="Processed Video Stream" 
+                            class="video-element"
+                            onerror="handleFeedError()"
+                        />
+                        <div class="feed-overlay-info">
+                            YOLOv11 Pose + ByteTrack Tracker ACTIVE
+                        </div>
+                    `;
+                }
+            }
+        };
+
+        window.handleFeedError = () => {
+            const img = document.getElementById('mjpeg-stream-img');
+            if (img) img.style.display = 'none';
+        };
+
+        const dismissActiveAlert = () => {
+            state.activeAlert = null;
+            renderMonitorPanel();
+            renderHeader();
+        };
+
+        const renderMonitorPanel = () => {
+            const content = document.getElementById('monitor-panel-content');
+            
+            if (state.activeAlert) {
+                const alert = state.activeAlert;
+                content.innerHTML = `
+                    <div class="alert-active-state">
+                        <div class="alert-banner-top">
+                            <div class="alert-banner-icon">${SVGS.shieldAlert}</div>
+                            <div class="alert-banner-text">
+                                <h3>FALL DETECTED</h3>
+                                <p>Tracked Subject #${alert.person_id} • ${formatRelativeTime(alert.timestamp)}</p>
+                            </div>
+                            <button onclick="dismissActiveAlert()" style="margin-left: auto; background: none; border: none; color: var(--text-secondary); cursor: pointer">
+                                ${SVGS.x}
+                            </button>
+                        </div>
+                        
+                        ${alert.screenshot_path ? `
+                            <div class="alert-screenshot-preview" onclick="openMediaModal(${alert.event_id}, 'screenshot')">
+                                <img src="${BACKEND_URL}${alert.screenshot_path}" alt="Incident Screenshot" />
+                                <span class="preview-badge">
+                                    ${SVGS.maximize2} View Frame
+                                </span>
+                            </div>
+                        ` : ''}
+                        
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <div class="stat-label">Confidence</div>
+                                <div class="stat-value high-confidence">${(alert.confidence_score * 100).toFixed(0)}%</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-label">Fall Velocity</div>
+                                <div class="stat-value">
+                                    ${alert.details?.peak_velocity ? `${alert.details.peak_velocity.toFixed(0)} px/s` : 'N/A'}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        ${alert.video_path ? `
+                            <button class="btn-primary" onclick="openMediaModal(${alert.event_id}, 'video')">
+                                ${SVGS.play} Replay Recorded Clip
+                            </button>
+                        ` : ''}
+                    </div>
+                `;
+            } else if (state.latestEvent) {
+                const event = state.latestEvent;
+                content.innerHTML = `
+                    <div class="alert-active-state" style="opacity: 0.85">
+                        <div class="alert-banner-top" style="background: rgba(255, 149, 0, 0.05); border: 1px solid rgba(255, 149, 0, 0.15)">
+                            <div class="alert-banner-icon" style="color: var(--accent-orange)">${SVGS.shieldAlert}</div>
+                            <div class="alert-banner-text">
+                                <h3 style="color: var(--accent-orange)">Recent Event</h3>
+                                <p>Tracked Subject #${event.person_id} • ${new Date(event.timestamp).toLocaleTimeString()}</p>
+                            </div>
+                        </div>
+                        
+                        ${event.screenshot_path ? `
+                            <div class="alert-screenshot-preview" onclick="openMediaModal(${event.event_id}, 'screenshot')">
+                                <img src="${BACKEND_URL}${event.screenshot_path}" alt="Incident Screenshot" />
+                                <span class="preview-badge">
+                                    ${SVGS.maximize2} View Frame
+                                </span>
+                            </div>
+                        ` : ''}
+                        
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <div class="stat-label">Confidence</div>
+                                <div class="stat-value" style="color: var(--accent-orange)">${(event.confidence_score * 100).toFixed(0)}%</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-label">Verification</div>
+                                <div class="stat-value" style="color: var(--accent-green); font-size: 0.9rem">Motionless Passed</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                content.innerHTML = `
+                    <div class="no-alerts-state">
+                        ${SVGS.checkCircle}
+                        <h3>No Incidents Registered</h3>
+                        <p style="font-size: 0.85rem">No fall or fainting activities detected in the viewport.</p>
+                    </div>
+                `;
+            }
+        };
+
+        const renderTable = () => {
+            const tbody = document.getElementById('events-table-body');
+            
+            if (state.events.length > 0) {
+                let html = '';
+                state.events.forEach(event => {
+                    const confidenceClass = event.confidence_score >= 0.8 ? 'high' : 'medium';
+                    const metricsText = `V: ${event.details?.peak_velocity ? event.details.peak_velocity.toFixed(0) : 'N/A'} px/s | Still: ${event.details?.horizontal_duration ? event.details.horizontal_duration.toFixed(0) : '5'}s`;
+                    
+                    html += `
+                        <tr id="row-${event.event_id}">
+                            <td style="font-weight: 600">#${event.event_id}</td>
+                            <td>Subject #${event.person_id}</td>
+                            <td>
+                                <div style="display: flex; align-items: center; gap: 6px">
+                                    ${SVGS.clock}
+                                    <span>${new Date(event.timestamp).toLocaleString()}</span>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="confidence-badge ${confidenceClass}">
+                                    ${(event.confidence_score * 100).toFixed(0)}%
+                                </span>
+                            </td>
+                            <td>
+                                <div style="font-size: 0.8rem; color: var(--text-secondary)">
+                                    ${metricsText}
+                                </div>
+                            </td>
+                            <td>
+                                ${event.screenshot_path ? `
+                                    <button class="btn-table-action" onclick="openMediaModal(${event.event_id}, 'screenshot')">
+                                        ${SVGS.eye} View
+                                    </button>
+                                ` : 'N/A'}
+                            </td>
+                            <td>
+                                ${event.video_path ? `
+                                    <button class="btn-table-action" style="background: rgba(52, 199, 89, 0.1); border-color: rgba(52, 199, 89, 0.2); color: var(--accent-green)" onclick="openMediaModal(${event.event_id}, 'video')">
+                                        ${SVGS.video} Replay
+                                    </button>
+                                ` : 'N/A'}
+                            </td>
+                        </tr>
+                    `;
+                });
+                tbody.innerHTML = html;
+            } else {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="empty-table-state">
+                            No fall/fainting events found in log database.
+                        </td>
+                    </tr>
+                `;
+            }
+        };
+
+        // Modal triggers
+        window.openMediaModal = (eventId, type) => {
+            const event = state.events.find(e => e.event_id === eventId) || state.latestEvent;
+            if (!event) return;
+
+            const modal = document.getElementById('media-modal');
+            const title = document.getElementById('modal-title-text');
+            const mediaContainer = document.getElementById('modal-media-container');
+            const metaContainer = document.getElementById('modal-meta-container');
+
+            title.innerHTML = `${type === 'screenshot' ? 'Incident Screenshot' : 'Incident Video Clip'} 
+                               <span style="color: var(--text-secondary); font-size: 0.9rem; font-weight: normal; margin-left: 12px">
+                                 Event #${event.event_id} (Subject #${event.person_id})
+                               </span>`;
+
+            if (type === 'screenshot') {
+                mediaContainer.innerHTML = `<img src="${BACKEND_URL}${event.screenshot_path}" alt="Annotated Fall Frame" style="width: 100%; height: 100%; object-fit: contain;" />`;
+            } else {
+                mediaContainer.innerHTML = `
+                    <video 
+                        src="${BACKEND_URL}${event.video_path}" 
+                        controls 
+                        autoplay 
+                        loop 
+                        style="width: 100%; height: 100%; object-fit: contain;"
+                    >
+                        Your browser does not support HTML5 video playback.
+                    </video>
+                `;
+            }
+
+            metaContainer.innerHTML = `
+                <div class="stat-item">
+                    <div class="stat-label">Date & Time</div>
+                    <div class="stat-value" style="font-size: 0.95rem">${new Date(event.timestamp).toLocaleString()}</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Confidence</div>
+                    <div class="stat-value" style="color: ${event.confidence_score >= 0.8 ? 'var(--accent-red)' : 'var(--accent-orange)'}">
+                        ${(event.confidence_score * 100).toFixed(0)}%
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Velocity / Motion</div>
+                    <div class="stat-value" style="font-size: 0.95rem">
+                        ${event.details?.peak_velocity ? `${event.details.peak_velocity.toFixed(0)} px/s` : 'N/A'}
+                    </div>
+                </div>
+            `;
+
+            modal.classList.add('active');
+        };
+
+        window.closeModal = () => {
+            const modal = document.getElementById('media-modal');
+            const mediaContainer = document.getElementById('modal-media-container');
+            mediaContainer.innerHTML = ''; // Stop video playback
+            modal.classList.remove('active');
+        };
+
+        // Data polling loop
+        const fetchEventsData = async () => {
+            try {
+                // 1. Health check
+                const healthRes = await fetch(`${BACKEND_URL}/health`);
+                state.apiConnected = healthRes.ok;
+
+                if (healthRes.ok) {
+                    // 2. Get events list
+                    const eventsRes = await fetch(`${BACKEND_URL}/events`);
+                    if (eventsRes.ok) {
+                        const eventsData = await eventsRes.json();
+                        state.events = eventsData;
+
+                        // 3. Get latest event
+                        const latestRes = await fetch(`${BACKEND_URL}/latest-event`);
+                        if (latestRes.ok) {
+                            const latestData = await latestRes.json();
+                            if (latestData && Object.keys(latestData).length > 0) {
+                                // Check for new event ID
+                                if (state.latestEvent && latestData.event_id !== state.latestEvent.event_id) {
+                                    playNotificationSound();
+                                    state.activeAlert = latestData;
+                                } else if (!state.latestEvent) {
+                                    const eventTime = new Date(latestData.timestamp);
+                                    const now = new Date();
+                                    if (now - eventTime < 30000) {
+                                        state.activeAlert = latestData;
+                                    }
+                                }
+                                state.latestEvent = latestData;
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("Polling error:", e);
+                state.apiConnected = false;
+            }
+
+            // Trigger updates
+            renderHeader();
+            renderVideoFeed();
+            renderMonitorPanel();
+            renderTable();
+        };
+
+        window.manualRefresh = () => {
+            fetchEventsData();
+        };
+
+        // Initialize
+        fetchEventsData();
+        setInterval(fetchEventsData, 3000);
+    </script>
+</body>
+</html>

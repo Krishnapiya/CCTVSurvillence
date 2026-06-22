@@ -20,7 +20,8 @@ EVENT_TYPE_MAPPING = {
     "human_detection": "Human Detection",
     "mobile_usage": "Mobile Phone Detection",
     "bag": "Bag Detection",
-    "bench": "Bench Detection"
+    "bench": "Bench Detection",
+    "fainting": "Fainting Detection"
 }
 
 active_job_ids_cache = set()
@@ -307,6 +308,31 @@ class StreamProcessor(threading.Thread):
         self._sync_db_status("offline")
         print(f"Stopped stream processor for camera {self.name}")
 
+    def is_fainting_detection_active(self) -> bool:
+        if not hasattr(self, "rois") or not self.rois:
+            return False
+        
+        # Get active job IDs from cache
+        global active_job_ids_cache, cache_lock
+        with cache_lock:
+            current_active_ids = set(active_job_ids_cache)
+            
+        for roi in self.rois:
+            roi_events = roi.get("events", [])
+            for rule in roi_events:
+                rule_id = rule.get("id", "")
+                rule_job_id = get_job_id_from_event(rule_id)
+                # Only check if its job exists and is active!
+                if not rule_job_id or rule_job_id not in current_active_ids:
+                    continue
+                
+                rule_type = rule.get("type", "")
+                rule_types = [t.strip() for t in rule_type.split(",")]
+                if "Fainting Detection" in rule_types:
+                    if is_schedule_active(rule):
+                        return True
+        return False
+
     async def _run_detection(self, frame: np.ndarray):
         if stream_processor_manager.processors.get(self.camera_id) is not self:
             return
@@ -353,6 +379,120 @@ class StreamProcessor(threading.Thread):
             for event in detected_events:
                 # Trigger callback (which is asynchronous)
                 await self.event_callback(self.camera_id, event, frame)
+
+            # --- FAINTING DETECTION LOGIC ---
+            try:
+                fainting_active = self.is_fainting_detection_active()
+            except Exception as ex:
+                print(f"Error checking fainting active status: {ex}")
+                fainting_active = False
+
+            if fainting_active:
+                if not hasattr(self, "fainting_tracker") or self.fainting_tracker is None:
+                    print(f"Initializing Fainting Tracker and State Machine for camera {self.name}")
+                    import sys
+                    import os
+                    fainting_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../fainting"))
+                    if not os.path.exists(fainting_dir):
+                        fainting_dir = "/data/hfllama/survialance/fainting"
+                    if fainting_dir not in sys.path:
+                        sys.path.insert(0, fainting_dir)
+                    
+                    from tracker import PersonTracker
+                    from state_machine import FallStateMachine
+                    self.fainting_tracker = PersonTracker()
+                    self.fainting_state_machine = FallStateMachine()
+                
+                try:
+                    persons = self.fainting_tracker.update(frame)
+                    active_ids = self.fainting_tracker.get_active_ids()
+                    
+                    from posture import analyze_posture, PostureState
+                    
+                    for person in persons:
+                        track_id = person["track_id"]
+                        bbox = person["bbox"]
+                        keypoints = person["keypoints"]
+                        kp_conf = person["keypoints_conf"]
+                        
+                        state, angle, aspect_ratio = analyze_posture(bbox, keypoints, kp_conf, track_id)
+                        
+                        alert_triggered, confidence, event_details = self.fainting_state_machine.update(
+                            track_id=track_id,
+                            posture=state,
+                            bbox=bbox,
+                            keypoints=keypoints,
+                            current_time=time.time(),
+                            frame=frame
+                        )
+                        
+                        if alert_triggered:
+                            event_frame = frame.copy()
+                            from main import draw_skeleton
+                            draw_skeleton(event_frame, keypoints, kp_conf)
+                            x1, y1, x2, y2 = map(int, bbox)
+                            cv2.rectangle(event_frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                            
+                            banner = event_frame.copy()
+                            cv2.rectangle(banner, (0, 0), (event_frame.shape[1], 60), (0, 0, 255), -1)
+                            cv2.addWeighted(banner, 0.7, event_frame, 0.3, 0, event_frame)
+                            cv2.putText(
+                                event_frame,
+                                f"*** CRITICAL: FAINT DETECTED (ID {track_id}, CONFIDENCE {confidence:.2f}) ***",
+                                (20, 40),
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                0.7,
+                                (255, 255, 255),
+                                2,
+                                cv2.LINE_AA
+                            )
+                            
+                            detection_payload = {
+                                "type": "fainting",
+                                "confidence": confidence,
+                                "details": {
+                                    "bbox": [int(x) for x in bbox],
+                                    "track_id": track_id,
+                                    "peak_velocity": event_details.get("peak_velocity"),
+                                    "motion_score": event_details.get("motion_score"),
+                                    "horizontal_duration": event_details.get("horizontal_duration")
+                                }
+                            }
+                            await self.event_callback(self.camera_id, detection_payload, event_frame)
+                            
+                    inactive_alerts = self.fainting_state_machine.check_inactive_alerts(active_ids, current_time=time.time())
+                    for track_id, confidence, event_details, last_falling_frame in inactive_alerts:
+                        base_frame = last_falling_frame if last_falling_frame is not None else frame
+                        alert_frame = base_frame.copy()
+                        
+                        banner = alert_frame.copy()
+                        cv2.rectangle(banner, (0, 0), (alert_frame.shape[1], 60), (0, 0, 255), -1)
+                        cv2.addWeighted(banner, 0.7, alert_frame, 0.3, 0, alert_frame)
+                        cv2.putText(
+                            alert_frame,
+                            f"*** CRITICAL: FAINT DETECTED (ID {track_id}, CONFIDENCE {confidence:.2f} - LOST TRACK) ***",
+                            (20, 40),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.7,
+                            (255, 255, 255),
+                            2,
+                            cv2.LINE_AA
+                        )
+                        
+                        detection_payload = {
+                            "type": "fainting",
+                            "confidence": confidence,
+                            "details": {
+                                "track_id": track_id,
+                                "faint_reason": "Track lost after fall/lying down",
+                                "peak_velocity": event_details.get("peak_velocity")
+                            }
+                        }
+                        await self.event_callback(self.camera_id, detection_payload, alert_frame)
+                        
+                    self.fainting_state_machine.clean_inactive_tracks(active_ids)
+                except Exception as e:
+                    print(f"Error executing fainting detection logic: {e}")
         except Exception as e:
             print(f"Error in stream detection for {self.name}: {e}")
 

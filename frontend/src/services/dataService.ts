@@ -580,7 +580,8 @@ export const dataService = {
           'human_detection': 'Human Detection',
           'mobile_usage': 'Mobile Phone Detection',
           'bag': 'Bag Detection',
-          'bench': 'Bench Detection'
+          'bench': 'Bench Detection',
+          'fainting': 'Fainting Detection'
         };
 
         const mapped = events.map((e: any) => {

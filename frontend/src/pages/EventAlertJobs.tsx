@@ -30,7 +30,9 @@ const eventTypes = [
   { name: 'Mobile Phone Detection' },
   { name: 'Bag Detection' },
   { name: 'Bench Detection' },
+  { name: 'Fainting Detection' },
 ];
+
 
 const EventAlertJobs: React.FC = () => {
   const location = useLocation();
