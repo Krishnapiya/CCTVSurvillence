@@ -23,7 +23,7 @@ import {
 } from '@mui/material';
 import { Add, Search, Delete, Edit, Videocam, PlayCircleFilled, Map as MapIcon } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { dataService, CameraProfile, getPort } from '../services/dataService';
+import { dataService, CameraProfile, getBackendBaseUrl } from '../services/dataService';
 
 const CameraManagement: React.FC = () => {
   const navigate = useNavigate();
@@ -111,11 +111,7 @@ const CameraManagement: React.FC = () => {
 
   return (
     <Box>
-      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Box>
-          <Typography variant="h1" sx={{ fontSize: '28px !important', fontWeight: 700, color: '#2C3E50', mb: 0.5 }}>Camera Profiles</Typography>
-          <Typography variant="body2" color="text.secondary">Define individual monitoring zones and deploy batch alert jobs</Typography>
-        </Box>
+      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
         <Button 
           variant="contained" 
           startIcon={<Add />} 
@@ -314,7 +310,7 @@ const CameraManagement: React.FC = () => {
           {liveCamera && (
             <Box
               component="img"
-              src={`http://${window.location.hostname}:${getPort()}/api/v1/cameras/${liveCamera.id}/stream`}
+              src={`${getBackendBaseUrl()}/api/v1/cameras/${liveCamera.id}/stream`}
               alt="Live Camera Stream"
               sx={{ width: '100%', height: '100%', objectFit: 'contain' }}
             />

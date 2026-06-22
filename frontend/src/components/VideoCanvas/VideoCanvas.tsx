@@ -10,7 +10,7 @@ import {
   Cancel
 } from '@mui/icons-material';
 import { fabric } from 'fabric';
-import { getPort } from '../../services/dataService';
+import { getBackendBaseUrl } from '../../services/dataService';
 
 interface VideoCanvasProps {
   onChange?: (roi: any) => void;
@@ -151,7 +151,7 @@ const VideoCanvas: React.FC<VideoCanvasProps> = ({ onChange, initialRois, mode, 
     if (!fabricCanvas.current || !cameraId) return;
 
     const imgElement = document.createElement('img');
-    imgElement.src = `http://${window.location.hostname}:${getPort()}/api/v1/cameras/${cameraId}/stream`;
+    imgElement.src = `${getBackendBaseUrl()}/api/v1/cameras/${cameraId}/stream`;
     imgElement.crossOrigin = 'anonymous';
     
     let animationId: number;

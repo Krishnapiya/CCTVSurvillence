@@ -11,64 +11,56 @@ const theme = createTheme({
   palette: {
     mode: 'light',
     primary: {
-      main: '#2C3E50', // Dark Blue/Grey Government Style
+      main: '#0b2d5c',
     },
     secondary: {
-      main: '#3A6EA5',
+      main: '#1a4f8b',
     },
     background: {
-      default: '#F5F5F5', // Soft light background
-      paper: '#FFFFFF',
+      default: '#f0f4f8',
+      paper: '#ffffff',
     },
     text: {
-      primary: '#222222',
-      secondary: '#555555',
+      primary: '#1e293b',
+      secondary: '#475569',
     },
-    divider: '#DDDDDD',
+    divider: '#d8e2ec',
+    success: { main: '#16a34a' },
+    warning: { main: '#d97706' },
+    error: { main: '#dc2626' },
+    info: { main: '#0284c7' },
   },
   typography: {
-    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
-    h1: { fontSize: '22px', fontWeight: 600 },
-    h2: { fontSize: '18px', fontWeight: 600 },
-    h3: { fontSize: '16px', fontWeight: 600 },
-    body1: { fontSize: '14px' },
-    body2: { fontSize: '14px' },
+    fontFamily: "'Inter', system-ui, sans-serif",
+    h1: { fontSize: '1.5rem', fontWeight: 700, color: '#0b2d5c' },
+    h2: { fontSize: '1.1rem', fontWeight: 600, color: '#0b2d5c' },
+    h3: { fontSize: '0.95rem', fontWeight: 600 },
+    body1: { fontSize: '0.875rem' },
+    body2: { fontSize: '0.8125rem' },
     button: { textTransform: 'none', fontWeight: 500 },
   },
   shape: {
-    borderRadius: 4, // 4px radius as per guidelines
+    borderRadius: 10,
   },
   components: {
     MuiButton: {
       styleOverrides: {
         root: {
           boxShadow: 'none',
-          '&:hover': {
-            boxShadow: 'none',
-          },
+          '&:hover': { boxShadow: 'none' },
         },
       },
     },
     MuiPaper: {
       styleOverrides: {
         root: {
-          boxShadow: 'none',
-          border: '1px solid #DDDDDD',
-        },
-      },
-    },
-    MuiAppBar: {
-      styleOverrides: {
-        root: {
-          boxShadow: 'none',
-          borderBottom: '1px solid #DDDDDD',
-          backgroundColor: '#FFFFFF',
-          color: '#222222',
+          boxShadow: '0 2px 12px rgba(11, 45, 92, 0.08)',
+          border: '1px solid #d8e2ec',
         },
       },
     },
   },
-});
+})
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

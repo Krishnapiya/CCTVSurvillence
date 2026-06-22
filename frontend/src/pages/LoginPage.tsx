@@ -1,180 +1,147 @@
-import React from 'react';
-import { 
-  Box, 
-  Container, 
-  Typography, 
-  TextField, 
-  Button, 
-  Paper, 
-  Stack, 
-  InputAdornment, 
-  IconButton,
-  useTheme
-} from '@mui/material';
-import { Visibility, VisibilityOff, Security } from '@mui/icons-material';
-import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
-import { useDispatch } from 'react-redux';
-import { loginSuccess } from '../store/authSlice';
+import React, { useState } from 'react'
+import { LogIn } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { useDispatch } from 'react-redux'
+import { loginSuccess } from '../store/authSlice'
+import { getBackendBaseUrl, getHost, getPort } from '../services/dataService'
+import { branding, getPageSubtitle } from '../config/branding'
 
 const LoginPage: React.FC = () => {
-  const [showPassword, setShowPassword] = React.useState(false);
-  const [username, setUsername] = React.useState('admin');
-  const [password, setPassword] = React.useState('admin123');
-  const theme = useTheme();
-  const navigate = useNavigate();
-  const dispatch = useDispatch();
+  const [username, setUsername] = useState('admin')
+  const [password, setPassword] = useState('admin123')
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const navigate = useNavigate()
+  const dispatch = useDispatch()
 
-  const handleLogin = async () => {
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setSubmitting(true)
+
     try {
-      const formData = new URLSearchParams();
-      // Map frontend 'admin' username to seeded 'admin@surveillance.com' email
-      formData.append('username', username === 'admin' ? 'admin@surveillance.com' : username);
-      formData.append('password', password);
+      const formData = new URLSearchParams()
+      formData.append('username', username === 'admin' ? 'admin@surveillance.com' : username)
+      formData.append('password', password)
 
-      const backendHost = window.location.hostname;
-      let backendPort = localStorage.getItem('surv_backend_port') || '8005';
+      const backendHost = getHost()
+      let backendPort = getPort()
+      let response: Response | undefined
 
-      let response;
       try {
-        response = await fetch(`http://${backendHost}:${backendPort}/api/v1/auth/login`, {
+        response = await fetch(`${getBackendBaseUrl()}/api/v1/auth/login`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: formData,
-        });
+        })
       } catch (err) {
-        const candidatePorts = ['8005', '8000', '8001', '8010'];
+        if (import.meta.env.VITE_BACKEND_HOST) throw err
+        const candidatePorts = ['8005', '8000', '8001', '8010']
         for (const port of candidatePorts) {
-          if (port === backendPort) continue;
+          if (port === backendPort) continue
           try {
             response = await fetch(`http://${backendHost}:${port}/api/v1/auth/login`, {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-              },
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
               body: formData,
-            });
+            })
             if (response.ok) {
-              localStorage.setItem('surv_backend_port', port);
-              break;
+              localStorage.setItem('surv_backend_port', port)
+              break
             }
-          } catch (err2) {}
+          } catch {
+            /* try next port */
+          }
         }
-        if (!response || !response.ok) {
-          throw err;
-        }
+        if (!response?.ok) throw err
       }
 
-      if (response && response.ok) {
-        const data = await response.json();
-        localStorage.setItem('surv_auth', 'true');
-        localStorage.setItem('surv_token', data.access_token);
-        dispatch(loginSuccess({ username }));
-        navigate('/');
-        return;
-      } else if (response) {
-        const errorData = await response.json();
-        alert(`Authentication failed: ${errorData.detail || 'Invalid credentials'}`);
-        return;
+      if (response?.ok) {
+        const data = await response.json()
+        localStorage.setItem('surv_auth', 'true')
+        localStorage.setItem('surv_token', data.access_token)
+        localStorage.setItem('surv_username', username)
+        dispatch(loginSuccess({ username }))
+        navigate('/')
+        return
       }
-    } catch (err) {
-      console.error('Backend connection failed:', err);
-      alert('Could not connect to the backend server. Please verify the backend is running.');
+
+      const errorData = await response?.json().catch(() => ({}))
+      setError(errorData.detail || 'Invalid credentials')
+    } catch {
+      setError('Could not connect to the station backend. Verify the server is running.')
+    } finally {
+      setSubmitting(false)
     }
-  };
+  }
 
   return (
-    <Box 
-      sx={{ 
-        height: '100vh', 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center',
-        bgcolor: '#F5F5F5',
-      }}
-    >
-      <Container maxWidth="xs">
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}>
-          <Paper 
-            sx={{ 
-              p: 4, 
-              borderRadius: 1, 
-              bgcolor: '#FFFFFF',
-              border: '1px solid #DDDDDD',
-              textAlign: 'center'
+    <div className="login-page">
+      <div className="login-card">
+        <div className="login-header">
+          <img
+            src="/assets/images/logo-2.png"
+            alt="Kerala Prisons"
+            className="login-logo"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none'
             }}
-          >
-            <Stack spacing={3}>
-              <Box sx={{ mb: 1 }}>
-                <Security sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
-                <Typography variant="h1" sx={{ fontSize: '20px !important', mb: 0.5 }}>
-                  SYSTEM ACCESS
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Please sign in to the Surveillance Portal
-                </Typography>
-              </Box>
+          />
+          <h1>{branding.organization}</h1>
+          <p>{getPageSubtitle()}</p>
+          <div className="station-badge login-station-badge">
+            <span className="station-badge-code">{branding.stationCode}</span>
+            <span className="station-badge-name">{branding.stationName}</span>
+          </div>
+        </div>
 
-              <Box sx={{ textAlign: 'left' }}>
-                <Typography variant="caption" fontWeight="bold" sx={{ mb: 1, display: 'block' }}>USERNAME</Typography>
-                <TextField
-                  fullWidth
-                  variant="outlined"
-                  size="small"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Enter username"
-                  sx={{ bgcolor: '#FFFFFF' }}
-                />
-              </Box>
+        <form className="login-form" onSubmit={handleLogin}>
+          <h2>Sign In</h2>
+          {error && <div className="login-error">{error}</div>}
 
-              <Box sx={{ textAlign: 'left' }}>
-                <Typography variant="caption" fontWeight="bold" sx={{ mb: 1, display: 'block' }}>PASSWORD</Typography>
-                <TextField
-                  fullWidth
-                  type={showPassword ? 'text' : 'password'}
-                  variant="outlined"
-                  size="small"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter password"
-                  InputProps={{
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton onClick={() => setShowPassword(!showPassword)} size="small">
-                          {showPassword ? <VisibilityOff sx={{ fontSize: 18 }} /> : <Visibility sx={{ fontSize: 18 }} />}
-                        </IconButton>
-                      </InputAdornment>
-                    ),
-                  }}
-                  sx={{ bgcolor: '#FFFFFF' }}
-                />
-              </Box>
+          <label>
+            Username
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Enter username"
+              autoComplete="username"
+              required
+            />
+          </label>
 
-              <Button 
-                fullWidth 
-                variant="contained" 
-                onClick={handleLogin}
-                sx={{ 
-                  height: 44, 
-                  bgcolor: '#2C3E50',
-                  '&:hover': { bgcolor: '#34495E' }
-                }}
-              >
-                Sign In
-              </Button>
+          <label>
+            Password
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter password"
+              autoComplete="current-password"
+              required
+            />
+          </label>
 
-              <Typography variant="caption" color="text.secondary">
-                © 2026 SURV-EYE • Internal Use Only
-              </Typography>
-            </Stack>
-          </Paper>
-        </motion.div>
-      </Container>
-    </Box>
-  );
-};
+          <button type="submit" className="login-btn" disabled={submitting}>
+            <LogIn size={18} />
+            {submitting ? 'Signing in...' : 'Sign In'}
+          </button>
+        </form>
 
-export default LoginPage;
+        <div className="login-footer">
+          <img
+            src="/assets/images/gvt.png"
+            alt="Government of Kerala"
+            className="login-govt"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none'
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default LoginPage

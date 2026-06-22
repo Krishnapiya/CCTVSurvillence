@@ -60,13 +60,8 @@ const ROIListPage: React.FC = () => {
 
   return (
     <Box>
-      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Box>
-          <Typography variant="h1">Region of Interest</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Manage your defined detection zones across all cameras.
-          </Typography>
-        </Box>
+      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Box />
         <Button 
           variant="contained" 
           startIcon={<Add />} 

@@ -3,7 +3,8 @@ import {
   Box, Typography, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, IconButton, Stack, TextField, InputAdornment, Button, Dialog, DialogTitle, DialogContent, Grid, Divider
 } from '@mui/material';
 import { Visibility, FilterList, Search, Download, AccessTime, Videocam, PlayCircleFilled } from '@mui/icons-material';
-import { dataService, EventLog } from '../services/dataService';
+import { dataService } from '../services/dataService';
+import VideoClipPlayer, { getEventClipDownloadUrl } from '../components/VideoClipPlayer';
 
 const EventLogs: React.FC = () => {
   const [logs, setLogs] = useState<any[]>([]);
@@ -38,11 +39,7 @@ const EventLogs: React.FC = () => {
 
   return (
     <Box>
-      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Box>
-          <Typography variant="h1">System Audit & Event Logs</Typography>
-          <Typography variant="body2" color="text.secondary">Historical record of all security events and detected violations</Typography>
-        </Box>
+      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
         <Button 
           variant="outlined" 
           startIcon={<Download sx={{ fontSize: 18 }} />} 
@@ -155,12 +152,11 @@ const EventLogs: React.FC = () => {
             <Grid item xs={12} md={8}>
               <Box sx={{ p: 2 }}>
                 <Box sx={{ width: '100%', aspectRatio: '16/9', bgcolor: '#000', borderRadius: 0.5, overflow: 'hidden', position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                  {selectedLog?.videoUrl ? (
-                    <video 
-                      src={selectedLog.videoUrl} 
-                      controls 
+                  {selectedLog?.id ? (
+                    <VideoClipPlayer
+                      eventId={selectedLog.id}
+                      poster={selectedLog.thumbnail}
                       autoPlay
-                      style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
                     />
                   ) : (
                     <>
@@ -190,15 +186,31 @@ const EventLogs: React.FC = () => {
                   <Button 
                     variant="contained" 
                     fullWidth 
-                    component="a"
-                    href={selectedLog?.videoUrl || '#'}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    download={`Evidence-${selectedLog?.id}.mp4`}
-                    disabled={!selectedLog?.videoUrl}
+                    disabled={!selectedLog?.id}
+                    onClick={async () => {
+                      if (!selectedLog?.id) return;
+                      try {
+                        const token = localStorage.getItem('surv_token');
+                        const response = await fetch(getEventClipDownloadUrl(selectedLog.id), {
+                          headers: token ? { Authorization: `Bearer ${token}` } : {},
+                        });
+                        if (!response.ok) throw new Error('Download failed');
+                        const blob = await response.blob();
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = `Evidence-${selectedLog.id}.mp4`;
+                        link.click();
+                        URL.revokeObjectURL(url);
+                      } catch {
+                        if (selectedLog?.videoUrl) {
+                          window.open(selectedLog.videoUrl, '_blank');
+                        }
+                      }
+                    }}
                     sx={{ bgcolor: '#2C3E50' }}
                   >
-                    {selectedLog?.videoUrl ? "Download Evidence Clip" : "No Clip Available"}
+                    {selectedLog?.id ? 'Download Evidence Clip' : 'No Clip Available'}
                   </Button>
                 </Stack>
               </Box>

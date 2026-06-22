@@ -4,6 +4,7 @@ import {
 } from '@mui/material';
 import { Videocam, Warning, TrendingUp, Map as MapIcon, Circle, ListAlt, ArrowDropDown, PlayCircleFilled, AccessTime } from '@mui/icons-material';
 import { dataService, CameraProfile, AlertJob } from '../services/dataService';
+import VideoClipPlayer, { getEventClipDownloadUrl } from '../components/VideoClipPlayer';
 
 const StatCard: React.FC<{ 
   title: string, 
@@ -265,8 +266,6 @@ const Dashboard: React.FC = () => {
 
   return (
     <Box>
-      <Typography variant="h1" sx={{ mb: 3 }}>System Dashboard</Typography>
-      
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard 
@@ -490,12 +489,11 @@ const Dashboard: React.FC = () => {
             <Grid item xs={12} md={8}>
               <Box sx={{ p: 2 }}>
                 <Box sx={{ width: '100%', aspectRatio: '16/9', bgcolor: '#000', borderRadius: 0.5, overflow: 'hidden', position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                  {selectedDetailLog?.videoUrl ? (
-                    <video 
-                      src={selectedDetailLog.videoUrl} 
-                      controls 
+                  {selectedDetailLog?.id ? (
+                    <VideoClipPlayer
+                      eventId={selectedDetailLog.id}
+                      poster={selectedDetailLog.thumbnail}
                       autoPlay
-                      style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
                     />
                   ) : (
                     <>
@@ -526,12 +524,28 @@ const Dashboard: React.FC = () => {
                     <Button 
                       variant="contained" 
                       fullWidth 
-                      component="a"
-                      href={selectedDetailLog?.videoUrl || '#'}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      download={`Evidence-${selectedDetailLog?.id}.mp4`}
-                      disabled={!selectedDetailLog?.videoUrl}
+                      disabled={!selectedDetailLog?.id}
+                      onClick={async () => {
+                        if (!selectedDetailLog?.id) return;
+                        try {
+                          const token = localStorage.getItem('surv_token');
+                          const response = await fetch(getEventClipDownloadUrl(selectedDetailLog.id), {
+                            headers: token ? { Authorization: `Bearer ${token}` } : {},
+                          });
+                          if (!response.ok) throw new Error('Download failed');
+                          const blob = await response.blob();
+                          const url = URL.createObjectURL(blob);
+                          const link = document.createElement('a');
+                          link.href = url;
+                          link.download = `Evidence-${selectedDetailLog.id}.mp4`;
+                          link.click();
+                          URL.revokeObjectURL(url);
+                        } catch {
+                          if (selectedDetailLog?.videoUrl) {
+                            window.open(selectedDetailLog.videoUrl, '_blank');
+                          }
+                        }
+                      }}
                       sx={{ bgcolor: '#2e7d32', '&:hover': { bgcolor: '#1b5e20' } }}
                     >
                       Download

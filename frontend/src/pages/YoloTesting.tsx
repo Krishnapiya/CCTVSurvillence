@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { getPort } from '../services/dataService';
+import { getBackendBaseUrl, getHost, getPort } from '../services/dataService';
 import {
   Box,
   Typography,
@@ -102,9 +102,9 @@ const YoloTesting: React.FC = () => {
     formData.append('file', imageFile);
 
     try {
-      const host = window.location.hostname;
+      const host = getHost();
       const port = getPort();
-      const response = await fetch(`http://${host}:${port}/api/v1/test-yolo/image`, {
+      const response = await fetch(`${getBackendBaseUrl()}/api/v1/test-yolo/image`, {
         method: 'POST',
         body: formData,
       });
@@ -128,16 +128,14 @@ const YoloTesting: React.FC = () => {
     formData.append('file', videoFile);
 
     try {
-      const host = window.location.hostname;
-      const port = getPort();
-      const response = await fetch(`http://${host}:${port}/api/v1/test-yolo/video`, {
+      const response = await fetch(`${getBackendBaseUrl()}/api/v1/test-yolo/video`, {
         method: 'POST',
         body: formData,
       });
 
       if (!response.ok) throw new Error('Failed to analyze video');
       const data = await response.json();
-      setResultVideoUrl(`http://${host}:${port}${data.video_url}`);
+      setResultVideoUrl(`${getBackendBaseUrl()}${data.video_url}`);
       setDetectedTypes(data.detected_types);
       setProcessedFrames(data.processed_frames);
     } catch (err) {

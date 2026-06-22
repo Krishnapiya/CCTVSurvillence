@@ -43,25 +43,56 @@ const STORAGE_KEYS = {
   JOBS: 'surv_alert_jobs',
 };
 
-// Dynamic API and Media URLs based on client access address
+// Backend URL: set VITE_BACKEND_HOST / VITE_BACKEND_PORT in .env.local for remote API
 export const getHost = () => {
-  return typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+  const envHost = import.meta.env.VITE_BACKEND_HOST;
+  if (envHost) return envHost;
+  if (typeof window !== 'undefined') {
+    const stored = localStorage.getItem('surv_backend_host');
+    if (stored) return stored;
+    return window.location.hostname;
+  }
+  return 'localhost';
 };
 
 export const getPort = () => {
-  return localStorage.getItem('surv_backend_port') || '8005';
+  const envPort = import.meta.env.VITE_BACKEND_PORT;
+  if (envPort) return envPort;
+  if (typeof window !== 'undefined') {
+    const stored = localStorage.getItem('surv_backend_port');
+    if (stored) return stored;
+  }
+  return '8005';
 };
 
-const API_BASE = `http://${getHost()}:${getPort()}/api/v1`;
-const MEDIA_BASE = `http://${getHost()}:${getPort()}`;
+export const getBackendBaseUrl = () => `http://${getHost()}:${getPort()}`;
+
+export function resolveMediaUrl(path: string | null | undefined): string | null {
+  if (!path) return null;
+  if (path.startsWith('http')) return path;
+
+  let normalized = path.trim();
+  if (normalized.startsWith('./')) {
+    normalized = normalized.slice(2);
+  }
+  normalized = normalized.replace(/^\/+/, '');
+  if (!normalized.startsWith('media/')) {
+    normalized = `media/${normalized}`;
+  }
+  return `${getBackendBaseUrl()}/${normalized}`;
+}
+
+const API_BASE = `${getBackendBaseUrl()}/api/v1`;
+const MEDIA_BASE = getBackendBaseUrl();
 
 export const dataService = {
   // Check if API is available
   checkApi: async () => {
     const host = getHost();
     const currentPort = getPort();
+    const configured = Boolean(import.meta.env.VITE_BACKEND_HOST);
     try {
-      const res = await fetch(`http://${host}:${currentPort}/api/v1/status`);
+      const res = await fetch(`${getBackendBaseUrl()}/api/v1/status`);
       if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
         const data = await res.json();
         if (data && (data.status === 'healthy' || data.status === 'online')) {
@@ -69,6 +100,8 @@ export const dataService = {
         }
       }
     } catch {}
+
+    if (configured) return false;
 
     const candidatePorts = ['8005', '8000', '8001', '8010'];
     for (const port of candidatePorts) {
@@ -598,21 +631,11 @@ export const dataService = {
           
           let thumbnail = 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?auto=format&fit=crop&w=400&q=80';
           if (e.snapshot_path) {
-            let path = e.snapshot_path;
-            if (path.startsWith('./')) {
-              path = path.substring(2);
-            }
-            thumbnail = e.snapshot_path.startsWith('http') ? e.snapshot_path : `${MEDIA_BASE}/${path}`;
+            thumbnail = resolveMediaUrl(e.snapshot_path) || thumbnail;
           }
           
-          let videoUrl = null;
-          if (e.video_clip_path) {
-            let path = e.video_clip_path;
-            if (path.startsWith('./')) {
-              path = path.substring(2);
-            }
-            videoUrl = e.video_clip_path.startsWith('http') ? e.video_clip_path : `${MEDIA_BASE}/${path}`;
-          }
+          const videoUrl = resolveMediaUrl(e.video_clip_path);
+          const clipStreamUrl = e.id ? `${getBackendBaseUrl()}/api/v1/events/${e.id}/clip` : null;
           
           return {
             id: e.id,
@@ -622,7 +645,8 @@ export const dataService = {
             severity: severity,
             confidence: `${(e.confidence * 100).toFixed(1)}%`,
             thumbnail: thumbnail,
-            videoUrl: videoUrl
+            videoUrl: videoUrl,
+            clipStreamUrl: clipStreamUrl,
           };
         });
         localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(mapped));

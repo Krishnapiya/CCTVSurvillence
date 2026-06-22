@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Box, Typography, Paper, Stack, Switch, FormControlLabel, Divider, Button, TextField, Avatar, Grid, Dialog, DialogTitle, DialogContent, DialogActions, Alert, Snackbar
+  Box, Typography, Paper, Stack, Switch, FormControlLabel, Divider, Button, TextField, Avatar, Grid, Dialog, DialogTitle, DialogContent, DialogActions, Alert, Snackbar, Chip
 } from '@mui/material';
 import { 
   Notifications, 
@@ -11,7 +11,7 @@ import {
   Save,
   LockOpen
 } from '@mui/icons-material';
-import { motion } from 'framer-motion';
+import { branding } from '../config/branding';
 
 const SettingsPage: React.FC = () => {
   const [settings, setSettings] = useState({
@@ -54,12 +54,20 @@ const SettingsPage: React.FC = () => {
 
   return (
     <Box>
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h1">Account & System Settings</Typography>
-        <Typography variant="body2" color="text.secondary">Configure your user profile and system notification preferences</Typography>
-      </Box>
-
       <Grid container spacing={3}>
+        <Grid item xs={12}>
+          <Paper sx={{ p: 2.5, borderRadius: 2 }}>
+            <Typography variant="h3" sx={{ mb: 1.5 }}>Station Installation</Typography>
+            <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
+              <Chip label={branding.stationCode} color="primary" size="small" />
+              <Chip label={branding.stationName} variant="outlined" size="small" />
+              <Chip label={branding.installationId} variant="outlined" size="small" />
+            </Stack>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
+              {branding.masterDashboardHint}
+            </Typography>
+          </Paper>
+        </Grid>
         <Grid item xs={12} md={4}>
           <Paper sx={{ p: 3, borderRadius: 1, bgcolor: '#FFFFFF', textAlign: 'center' }}>
             <Avatar sx={{ width: 80, height: 80, mx: 'auto', mb: 2, bgcolor: 'primary.main', fontSize: '1.5rem' }}>AD</Avatar>

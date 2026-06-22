@@ -244,6 +244,13 @@ async def async_process_event_clip_and_verify(
             file_size = os.path.getsize(clip_path)
             duration = len(frame_files) / 15.0
             print(f"Video clip compiled successfully at: {clip_path} (Size: {file_size} bytes)")
+
+            from app.services.video_transcode import ensure_web_playable_clip
+            web_clip_path = ensure_web_playable_clip(clip_path)
+            if web_clip_path and web_clip_path != clip_path and os.path.exists(web_clip_path):
+                clip_path = web_clip_path
+                file_size = os.path.getsize(clip_path)
+                print(f"Web-playable clip ready at: {clip_path}")
         except Exception as e:
             print(f"Error compiling video clip: {e}")
             clip_path = ""

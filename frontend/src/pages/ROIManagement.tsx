@@ -138,13 +138,10 @@ const ROIManagement: React.FC = () => {
 
   return (
     <Box>
-      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Box>
-          <Typography variant="h1">Region of Interest Configuration</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Managing zones for: <strong>{camera?.name || 'Loading...'}</strong>
-          </Typography>
-        </Box>
+      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography variant="body2" color="text.secondary">
+          Managing zones for: <strong>{camera?.name || 'Loading...'}</strong>
+        </Typography>
         <Stack direction="row" spacing={1.5}>
           <Button variant="outlined" onClick={() => navigate('/rois')} size="small">Back to List</Button>
           {(canvasMode === 'add' || canvasMode === 'edit') && (
