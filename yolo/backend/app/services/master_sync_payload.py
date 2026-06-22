@@ -15,7 +15,7 @@ from app.models.event import Event
 from app.services.event_type_mapping import map_to_master_event_code
 
 
-def station_context() -> dict[str, str]:
+def station_context() -> dict[str, str | bool]:
     return {
         "installation_id": settings.INSTALLATION_ID,
         "office_code": settings.OFFICE_CODE,

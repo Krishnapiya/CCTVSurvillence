@@ -12,6 +12,7 @@ from app.repositories.camera import CameraRepository
 from app.services.websocket_manager import ws_manager
 from app.services.stream_processor import stream_processor_manager
 from app.services.event_engine import event_engine
+from app.services.master_sync_scheduler import start_master_sync_background, stop_master_sync_background
 
 # Import routers
 from app.api.auth import router as auth_router
@@ -108,9 +109,12 @@ async def startup_event():
             except Exception as ex:
                 print(f"Could not load camera {c.name} on startup: {ex}")
 
+    start_master_sync_background()
+
 # Shutdown Events
 @app.on_event("shutdown")
-def shutdown_event():
+async def shutdown_event():
+    await stop_master_sync_background()
     print("Cleaning up camera streams...")
     stream_processor_manager.stop_all()
     print("Backend application stopped.")

@@ -55,6 +55,8 @@ CREATE TABLE events (
     roi_name VARCHAR(255),
     snapshot_path VARCHAR(255),
     video_clip_path VARCHAR(255),
+    master_synced_at TIMESTAMP WITH TIME ZONE,
+    master_clip_synced_at TIMESTAMP WITH TIME ZONE,
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
